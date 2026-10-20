@@ -7,6 +7,7 @@ export function Header() {
       <div className="m-4">
         <button className="m-4">LatestNews</button>
         <button className="m-4">MyPage</button>
+        <button className="bg-red-300">news取得</button>
       </div>
     </header>
   );

@@ -1,15 +1,55 @@
 import os
+from pathlib import Path
 from dotenv import load_dotenv  
 
 load_dotenv()
 
 import feedparser
 import google.generativeai as genai
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+import json
+from pydantic import BaseModel
+from typing import Any, List
+
+    # 6. Geminiモデルの呼び出し（JSON出力を強制する設定を入れる）
+GEMINI_API_KEY=os.environ["GEMINI_API_KEY"]
+#genai.configure(api_key=os.environ["GEMINI_API_KEY"]) 
+genai.configure(api_key=GEMINI_API_KEY) 
+    
+
+# 1. 構造の定義（TypeScriptの型定義と一対一になる）
+class SelectedArticle(BaseModel):
+    title: str
+    url: str
+    reason: str  # なぜ今読むべきなのか（選定理由）
+
+class NewsResponse(BaseModel):
+    mentor_message: str            # 最後のメンターメッセージ
+    selected_articles: List[SelectedArticle]  # AIが選んだ3〜5件
+    all_candidates_count: int      # 取得した全記事数などのメタ情報
+
+    
+app = FastAPI()
+
+# React(Vite)からのリクエストを許可するCORS設定
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],  # Viteのデフォルトポート
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
-# 1. APIキーの設定
+checked_urls = set([
+    "https://zenn.dev/hand_dot/articles/ecb391d4322330",
+    "https://zenn.dev/hand_dot/articles/ecb391d4322330",
+    "https://qiita.com/satoshot/items/3308a7e025cd9f049813?utm_campaign=popular_items&utm_medium=feed&utm_source=popular_items",
+    "https://zenn.dev/ara_jlu/articles/per-task-review-dropped"
+])
 
-genai.configure(api_key=os.environ["GEMINI_API_KEY"])
 
 # 2. ユーザーのコンテキスト
 user_context = {
@@ -34,84 +74,101 @@ user_context = {
     ]
 }
 
-# 3. RSSフィードのURLリスト
-rss_urls = [
+
+@app.get("/api/news")
+def get_news():
+    # 3. RSSフィードのURLリスト
+    rss_urls = [
     "https://zenn.dev/feed",                  # Zenn（技術トレンド）
     "https://qiita.com/popular-items/feed",     # Qiita（人気記事）
-]
+    ]
+    candidates: List[dict[str, str]] = []
+    for url in rss_urls:
+        feed: Any = feedparser.parse(url)
+        for entry in feed.entries[:25]:
+            title = entry.title
+            link = entry.link
+            # 概要を取得（HTMLタグ除去や長さ調整）
+            summary = getattr(entry, 'summary', '概要なし')
 
-checked_urls = set([
-    "https://zenn.dev/hand_dot/articles/ecb391d4322330",
-    "https://zenn.dev/hand_dot/articles/ecb391d4322330",
-    "https://qiita.com/satoshot/items/3308a7e025cd9f049813?utm_campaign=popular_items&utm_medium=feed&utm_source=popular_items",
-    "https://zenn.dev/ara_jlu/articles/per-task-review-dropped"
-])
+            if link in checked_urls:continue
+            print("タイトル",title,link,end="\n")
+            candidates.append({
+                "title": title,
+                "link": link,
+                "summary": summary[:200]  # 冒頭200文字程度
+            })
 
-print("📡 RSSフィードから記事データを収集中...")
+    # タイトルの重複排除
+    unique_candidates: List[dict[str, str]] = []
+    seen_titles: set[str] = set()
+    for c in candidates:
+        if c["title"] not in seen_titles:
+            seen_titles.add(c["title"])
+            unique_candidates.append(c)
 
-# 4. RSSから記事情報（タイトル・URL・概要）を取得
-candidates = []
-for url in rss_urls:
-    feed = feedparser.parse(url)
-    for entry in feed.entries[:25]:
-        title = entry.title
-        link = entry.link
-        # 概要を取得（HTMLタグ除去や長さ調整）
-        summary = getattr(entry, 'summary', '概要なし')
-       
-        if link in checked_urls:continue
-        print("タイトル",title,link,end="\n")
-        candidates.append({
-            "title": title,
-            "link": link,
-            "summary": summary[:200]  # 冒頭200文字程度
-        })
+    print(f"✅ {len(unique_candidates)} 件の個別記事を取得しました。AIエージェントが分析中...\n")
 
-# タイトルの重複排除
-unique_candidates = []
-seen_titles = set()
-for c in candidates:
-    if c["title"] not in seen_titles:
-        seen_titles.add(c["title"])
-        unique_candidates.append(c)
 
-print(f"✅ {len(unique_candidates)} 件の個別記事を取得しました。AIエージェントが分析中...\n")
+    candidate_text_list = []
+    for idx, item in enumerate(unique_candidates, 1):
+        candidate_text_list.append(
+            f"[{idx}] タイトル: {item['title']}\n"
+            f"    URL: {item['link']}\n"
+            f"    概要: {item['summary']}\n")
 
-# 候補テキストの整形（chr(10)で改行連結）
-candidate_text_list = []
-for idx, item in enumerate(unique_candidates, 1):
-    candidate_text_list.append(
-        f"[{idx}] タイトル: {item['title']}\n"
-        f"    URL: {item['link']}\n"
-        f"    概要: {item['summary']}\n"
-    )
-
-formatted_candidates = "\n".join(candidate_text_list)
+    formatted_candidates = "\n".join(candidate_text_list)
 
 # 5. プロンプトの構築
-prompt = f"""
+    prompt = f"""
 あなたはユーザーの専属キャリアメンター兼・優秀な技術選定パーソナライズAIエージェントです。
 
 【ユーザーのコンテキスト】
 - 履修科目: {', '.join(user_context['subjects'])}
 - 関心・テーマ: {', '.join(user_context['interests'])}
-- 現在の心理的状況・悩み:
-{user_context['situation'][0]}
+- 現在の心理的状況・悩み: {user_context['situation'][0]}
 
 【候補記事リスト】
 {formatted_candidates}
 
 【指示】
-1. 候補リストの中から、ユーザーの興味・履修科目だけでなく、**「今の悩みやモチベーションの停滞を打破する助けになるような記事（AI時代のエンジニアの価値、開発プロセスの楽しみ、デザイン/基礎理論との掛け合わせなど）」**を含めて 3〜5 件選定してください。
-2. 各選定記事について以下の形式で出力してください：
-   - 記事タイトルとURL
-   - なぜ今、このユーザーが読むべきなのか（悩みにどう寄り添い、どんな気づきを与えるか）
-3. 最後に、AI時代にポートフォリオを作る意味や、ユーザーの持つ強み（情報デザインや基礎理論、3D表現などとの掛け合わせ）についての短く温かいメンターメッセージを添えてください。
+候補リストから、ユーザーの悩みやモチベーション向上に効く記事を3〜5件選定し、必ず以下のJSON構造のみで出力してください（Markdownのバッククォート等も不要）。
+
+{{
+  "mentor_message": "AI時代にポートフォリオを作る意味や強みに関する短く温かいメッセージ",
+  "selected_articles": [
+    {{
+      "title": "記事タイトル",
+      "url": "記事URL",
+      "reason": "選定理由（悩みにどう寄り添い、どんな気づきを与えるか）"
+    }}
+  ]
+}}
 """
 
-# 6. Geminiモデルの呼び出し
-model = genai.GenerativeModel('gemini-3.6-flash')
-response = model.generate_content(prompt)
 
-print("=== 🎯 AIエージェントの判定＆メンターフィードバック ===")
-print(response.text)
+    # response_mime_type を指定すると綺麗にJSONだけを返してくれる
+    model = genai.GenerativeModel(
+        'gemini-3.5-flash',
+        generation_config={"response_mime_type": "application/json"}
+    )
+
+
+    try:
+        response = model.generate_content(prompt)
+    except Exception as e:
+        print(f"Error generating content: {e}")
+        return {
+            "mentor_message": "",
+            "selected_articles": [],
+            "all_candidates_count": len(unique_candidates)
+        }
+
+    # 7. JSON文字列をPythonの辞書（dict）に変換して返却
+    result = json.loads(response.text)
+    
+    return {
+        "mentor_message": result.get("mentor_message", ""),
+        "selected_articles": result.get("selected_articles", []),
+        "all_candidates_count": len(unique_candidates)
+    }
