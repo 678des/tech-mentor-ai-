@@ -2,19 +2,13 @@ import { SidebarGoals } from "./components/SidebarGoals";
 import { ArticleList } from "./components/ArticleList";
 import { Header } from "./components/Header";
 import { useEffect, useState } from "react";
-import {
-  Sparkles,
-  ExternalLink,
-  BookOpen,
-  AlertCircle,
-  RefreshCw,
-} from "lucide-react";
+import { BookOpen, RefreshCw } from "lucide-react";
 
 // 1. FastAPIのレスポンス構造に合わせたTypeScriptの型定義
 export interface ResponseArticle {
   title: string;
   url: string;
-  reason: string;
+  summary: string;
 }
 
 function App() {
@@ -22,11 +16,11 @@ function App() {
     null,
   );
   const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
+  //const [error, setError] = useState<string | null>(null);
 
   const fetchNews = () => {
     setLoading(true);
-    setError(null);
+    //setError(null);
 
     console.log("ニュースをフェッチします");
     fetch("http://127.0.0.1:8000/api/news")
@@ -43,7 +37,7 @@ function App() {
       })
       .catch((err) => {
         console.error("API取得エラー:", err);
-        setError("データの取得に失敗しました。");
+        //setError("データの取得に失敗しました。");
         setLoading(false);
       });
   };

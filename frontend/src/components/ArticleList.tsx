@@ -10,7 +10,7 @@ export function ArticleList({
       <h1>test</h1>
       <div>
         <h2>📰 本日のおすすめAI要約ニュース</h2>
-        <span>全 {articlesData?.length || 0} 件</span>
+        <span>全{articlesData?.length || 0} 件</span>
       </div>
 
       {/* 記事カードの一覧 */}
@@ -22,7 +22,7 @@ export function ArticleList({
                 <span>{article.url}</span>
               </div>
               <h3>{article.title}</h3>
-              {/* <p>{article.summary}</p> summaryに変更 */}
+              <p>{article.summary}</p>
               <div>
                 <button>AI要約を見る →</button>
                 <button>★ お気に入り</button>

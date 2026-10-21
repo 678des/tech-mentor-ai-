@@ -96,7 +96,7 @@ def get_news():
             print("タイトル",title,link,end="\n")
             candidates.append({
                 "title": title,
-                "link": link,
+                "url": link,
                 "summary": summary[:200]  # 冒頭200文字程度
             })
 
