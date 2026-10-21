@@ -36,13 +36,13 @@ def save_articles(articles: List[Dict[str, str]]) -> None:
         print(f"記事保存時にエラーが発生しました: {e}")
 
 
-def get_all_articles() -> List[Dict[str, Any]]:
+def get_top_scored_articles() -> List[Dict[str, Any]]:
     """
-    Supabaseの `articles` テーブルからすべての記事データを取得する。
-    新しい記事が上に来るように created_at の降順でソート。
+    Supabaseの `articles` テーブルから、ai_score の高い順に上位20件の記事を取得する。
+    ai_scoreが設定されていない記事を除外したい場合は .not_.is_("ai_score", "null") を挟む。
     """
     try:
-        response = supabase.table("articles").select("*").order("created_at", desc=True).execute()
+        response = supabase.table("articles").select("*").order("ai_score", desc=True).limit(20).execute()
         return response.data
     except Exception as e:
         print(f"記事全件取得時にエラーが発生しました: {e}")

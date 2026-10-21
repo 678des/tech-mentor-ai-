@@ -89,14 +89,14 @@ def get_news():
 
 
 
-from crud import get_all_urls, save_articles, get_all_articles
+from crud import get_all_urls, save_articles, get_top_scored_articles
 
 @app.get("/api/articles")
 def get_articles_endpoint():
     """
     Supabaseに保存されているすべての記事をJSON形式でフロントエンドに返す
     """
-    articles = get_all_articles()
+    articles = get_top_scored_articles()
     return {
         "count": len(articles),
         "articles": articles
