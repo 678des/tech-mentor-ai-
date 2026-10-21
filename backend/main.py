@@ -6,11 +6,9 @@ print("スクリプト読み込み")
 load_dotenv()
 
 import feedparser
-import google.generativeai as genai
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-import json
 from pydantic import BaseModel
 from typing import Any, List, Dict
 
@@ -18,10 +16,6 @@ from typing import Any, List, Dict
 from crud import get_all_urls, save_articles
 
 
-    # 6. Geminiモデルの呼び出し（JSON出力を強制する設定を入れる）
-GEMINI_API_KEY=os.environ["GEMINI_API_KEY"]
-#genai.configure(api_key=os.environ["GEMINI_API_KEY"]) 
-genai.configure(api_key=GEMINI_API_KEY) 
     
 
 # 1. 構造の定義（TypeScriptの型定義と一対一になる）
@@ -46,31 +40,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-
-# 2. ユーザーのコンテキスト
-user_context = {
-    "subjects": [
-        "情報数学", "データ構造とアルゴリズム", "情報デザイン基礎", 
-        "Linux演習基礎", "英語", "情報関連法規と情報倫理",
-        "C++","Java","Python"
-    ],
-    "interests": [
-        "Next.js", "TypeScript", "AIエージェント開発", "AI駆動開発", 
-        "C# / Unity / Blender", "30卒", "AI代替による雇用の減少", "話題の技術"
-    ],
-    "situation": [
-        "AIにとられてもう就職できないのではないかという強い不安を感じている。"
-        "Next.js等でアプリを作ったが『既存のAIアプリでよくない？』と言われショックを受けている。"
-        "作る意味を見失いかけているが、Webエンジニアやモノづくりへの情熱の再燃・AI時代における独自の強み模索を必要としている。"
-    ],
-    "product":[
-        "学習アプリ(Next.jsで作ったが意味のなさに絶望)",
-        "Unity自動化エージェント(作成中だが、いろいろと停滞している)",
-        "RSS検索要約AI（定番だから不安）"
-    ]
-}
 
 
 @app.get("/api/news")
@@ -111,68 +80,9 @@ def get_news():
     save_articles(unique_candidates)
     return unique_candidates
 
-    candidate_text_list = []
-    for idx, item in enumerate(unique_candidates, 1):
-        candidate_text_list.append(
-            f"[{idx}] タイトル: {item['title']}\n"
-            f"URL: {item['link']}\n"
-            f"概要: {item['summary']}\n")
-
-    formatted_candidates = "\n".join(candidate_text_list)
-
-# 5. プロンプトの構築
-    prompt = f"""
-あなたはユーザーの専属キャリアメンター兼・優秀な技術選定パーソナライズAIエージェントです。
-
-【ユーザーのコンテキスト】
-- 履修科目: {', '.join(user_context['subjects'])}
-- 関心・テーマ: {', '.join(user_context['interests'])}
-- 現在の心理的状況・悩み: {user_context['situation'][0]}
-
-【候補記事リスト】
-{formatted_candidates}
-
-【指示】
-候補リストから、ユーザーの悩みやモチベーション向上に効く記事を3〜5件選定し、必ず以下のJSON構造のみで出力してください（Markdownのバッククォート等も不要）。
-
-{{
-  "mentor_message": "AI時代にポートフォリオを作る意味や強みに関する短く温かいメッセージ",
-  "selected_articles": [
-    {{
-      "title": "記事タイトル",
-      "url": "記事URL",
-      "reason": "選定理由（悩みにどう寄り添い、どんな気づきを与えるか）"
-    }}
-  ]
-}}
-"""
 
 
-    # response_mime_type を指定すると綺麗にJSONだけを返してくれる
-    model = genai.GenerativeModel(
-        'gemini-3.5-flash',
-        generation_config={"response_mime_type": "application/json"}
-    )
-
-
-    try:
-        response = model.generate_content(prompt)
-    except Exception as e:
-        print(f"Error generating content: {e}")
-        return {
-            "mentor_message": "",
-            "selected_articles": [],
-            "all_candidates_count": len(unique_candidates)
-        }
-
-    # 7. JSON文字列をPythonの辞書（dict）に変換して返却
-    result = json.loads(response.text)
-    
-    return {
-        "mentor_message": result.get("mentor_message", ""),
-        "selected_articles": result.get("selected_articles", []),
-        "all_candidates_count": len(unique_candidates)
-    }
+  
 
 
 
@@ -191,3 +101,35 @@ def get_articles_endpoint():
         "count": len(articles),
         "articles": articles
     }
+
+
+from ai import get_unprocessed_articles, evaluate_articles_with_gemini,update_articles_in_supabase
+
+@app.post("/api/run-ai-pipeline")
+def trigger_ai_pipeline():
+    """
+    フロントのボタンから叩かれるエンドポイント
+    """
+    try:
+        print("--- リクエスト検知：AI要約パイプライン実行開始 ---")
+        
+        # 1. 未処理の記事を取得
+        unprocessed = get_unprocessed_articles()
+        if not unprocessed:
+            return {"status": "ok", "message": "処理対象の新着記事はありません。", "count": 0}
+
+        # 2. まとめてGeminiに評価させる
+        evaluated = evaluate_articles_with_gemini(unprocessed)
+        if not evaluated:
+            return {"status": "error", "message": "Geminiからの評価取得に失敗しました。"}
+
+        # 3. Supabaseを更新
+        update_articles_in_supabase(evaluated)
+        
+        return {
+            "status": "success", 
+            "message": f"{len(unprocessed)}件の記事のAI要約・スコアリングが完了しました！",
+            "count": len(unprocessed)
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
