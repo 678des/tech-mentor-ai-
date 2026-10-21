@@ -12,7 +12,11 @@ from fastapi.middleware.cors import CORSMiddleware
 
 import json
 from pydantic import BaseModel
-from typing import Any, List
+from typing import Any, List, Dict
+
+# CRUDモジュールのインポート
+from crud import get_all_urls, save_articles
+
 
     # 6. Geminiモデルの呼び出し（JSON出力を強制する設定を入れる）
 GEMINI_API_KEY=os.environ["GEMINI_API_KEY"]
@@ -44,13 +48,6 @@ app.add_middleware(
 )
 
 
-checked_urls = set([
-    "https://zenn.dev/hand_dot/articles/ecb391d4322330",
-    "https://zenn.dev/hand_dot/articles/ecb391d4322330",
-    "https://qiita.com/satoshot/items/3308a7e025cd9f049813?utm_campaign=popular_items&utm_medium=feed&utm_source=popular_items",
-    "https://zenn.dev/ara_jlu/articles/per-task-review-dropped"
-])
-
 
 # 2. ユーザーのコンテキスト
 user_context = {
@@ -78,6 +75,8 @@ user_context = {
 
 @app.get("/api/news")
 def get_news():
+    
+    checked_urls = get_all_urls()
     # 3. RSSフィードのURLリスト
     rss_urls = [
     "https://zenn.dev/feed",                  # Zenn（技術トレンド）
@@ -109,7 +108,7 @@ def get_news():
             unique_candidates.append(c)
 
     print(f"✅ {len(unique_candidates)} 件の個別記事を取得しました\n")
-
+    save_articles(unique_candidates)
     return unique_candidates
 
     candidate_text_list = []
@@ -173,4 +172,22 @@ def get_news():
         "mentor_message": result.get("mentor_message", ""),
         "selected_articles": result.get("selected_articles", []),
         "all_candidates_count": len(unique_candidates)
+    }
+
+
+
+
+
+
+from crud import get_all_urls, save_articles, get_all_articles
+
+@app.get("/api/articles")
+def get_articles_endpoint():
+    """
+    Supabaseに保存されているすべての記事をJSON形式でフロントエンドに返す
+    """
+    articles = get_all_articles()
+    return {
+        "count": len(articles),
+        "articles": articles
     }

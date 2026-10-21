@@ -17,33 +17,51 @@ function App() {
   );
   const [loading, setLoading] = useState<boolean>(true);
   //const [error, setError] = useState<string | null>(null);
-
-  const fetchNews = () => {
-    setLoading(true);
-    //setError(null);
-
-    console.log("ニュースをフェッチします");
-    fetch("http://127.0.0.1:8000/api/news")
-      .then((res) => {
-        if (!res.ok) {
-          throw new Error(`サーバーエラー: ${res.status}`);
-        }
-        return res.json();
-      })
-      .then((data: ResponseArticle[]) => {
-        setArticleData(data);
-        console.log("取得したdata", data);
-        setLoading(false);
-      })
-      .catch((err) => {
-        console.error("API取得エラー:", err);
-        //setError("データの取得に失敗しました。");
-        setLoading(false);
-      });
+  const fetchArticles = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch("http://localhost:8000/api/articles");
+      if (!response.ok) {
+        throw new Error("記事の取得に失敗しました");
+      }
+      const data = await response.json();
+      // FastAPIが { count: number, articles: ResponseArticle[] } の形で返している場合
+      setArticleData(data.articles);
+    } catch (error) {
+      console.error("Fetch error:", error);
+    } finally {
+      setLoading(false);
+    }
   };
+  useEffect(() => {
+    fetchArticles();
+  }, []);
+  // const fetchNews = () => {
+  //   setLoading(true);
+  //   //setError(null);
+
+  //   console.log("ニュースをフェッチします");
+  //   fetch("http://127.0.0.1:8000/api/news")
+  //     .then((res) => {
+  //       if (!res.ok) {
+  //         throw new Error(`サーバーエラー: ${res.status}`);
+  //       }
+  //       return res.json();
+  //     })
+  //     .then((data: ResponseArticle[]) => {
+  //       setArticleData(data);
+  //       console.log("取得したdata", data);
+  //       setLoading(false);
+  //     })
+  //     .catch((err) => {
+  //       console.error("API取得エラー:", err);
+  //       //setError("データの取得に失敗しました。");
+  //       setLoading(false);
+  //     });
+  // };
 
   useEffect(() => {
-    fetchNews();
+    //fetchNews();
   }, []);
 
   return (
@@ -58,7 +76,7 @@ function App() {
           <p className="text-sm text-slate-500 mt-1">最新の技術ニュース</p>
         </div>
         <button
-          onClick={fetchNews}
+          onClick={fetchArticles}
           disabled={loading}
           className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white font-medium rounded-lg shadow-sm transition"
         >
