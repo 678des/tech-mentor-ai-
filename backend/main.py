@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv  
 
+print("スクリプト読み込み")
 load_dotenv()
 
 import feedparser
@@ -107,15 +108,16 @@ def get_news():
             seen_titles.add(c["title"])
             unique_candidates.append(c)
 
-    print(f"✅ {len(unique_candidates)} 件の個別記事を取得しました。AIエージェントが分析中...\n")
+    print(f"✅ {len(unique_candidates)} 件の個別記事を取得しました\n")
 
+    return unique_candidates
 
     candidate_text_list = []
     for idx, item in enumerate(unique_candidates, 1):
         candidate_text_list.append(
             f"[{idx}] タイトル: {item['title']}\n"
-            f"    URL: {item['link']}\n"
-            f"    概要: {item['summary']}\n")
+            f"URL: {item['link']}\n"
+            f"概要: {item['summary']}\n")
 
     formatted_candidates = "\n".join(candidate_text_list)
 
