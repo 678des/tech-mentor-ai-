@@ -28,6 +28,7 @@ pycparser==3.11
 pydantic==2.14.1
 pydantic_core==2.50.1
 PyJWT==2.15.1
+python-dotenv
 realtime==2.33.0
 requests==2.34.2
 soupsieve==3.0.3
