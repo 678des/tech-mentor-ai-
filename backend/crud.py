@@ -47,3 +47,44 @@ def get_top_scored_articles() -> List[Dict[str, Any]]:
     except Exception as e:
         print(f"記事全件取得時にエラーが発生しました: {e}")
         return []
+
+
+def get_unprocessed_articles() -> List[Dict[str, Any]]:
+    """
+    Supabaseの `articles` テーブルから、まだAIスコアがついていない（ai_scoreがNULLの）記事を取得する。
+    """
+    try:
+        # ai_score が is.null のものを取得（未処理のものだけを効率よく処理する）
+        response = (
+            supabase.table("articles")
+            .select("id, title, ai_comment, summary")
+            .is_("ai_score", "null")
+            .execute()
+        )
+        return response.data
+    except Exception as e:
+        print(f"未処理記事の取得時にエラーが発生しました: {e}")
+        return []
+
+
+
+def update_articles_in_supabase(evaluated_results: List[Dict[str, Any]]):
+    """
+    Geminiから返ってきた評価結果（スコア・コメント）をSupabaseに一括反映する。
+    """
+    for item in evaluated_results:
+        article_id = item.get("id")
+        score = item.get("score")
+        comment = item.get("comment")
+
+        if article_id is None:
+            continue
+
+        try:
+            supabase.table("articles").update({
+                "ai_score": score,
+                "ai_comment": comment
+            }).eq("id", article_id).execute()
+            print(f"記事ID {article_id}: 更新成功 (Score: {score})")
+        except Exception as e:
+            print(f"記事ID {article_id} のDB更新に失敗しました: {e}")

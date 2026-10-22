@@ -13,22 +13,6 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 client = genai.Client(api_key=GEMINI_API_KEY)
 
-def get_unprocessed_articles() -> List[Dict[str, Any]]:
-    """
-    Supabaseの `articles` テーブルから、まだAIスコアがついていない（ai_scoreがNULLの）記事を取得する。
-    """
-    try:
-        # ai_score が is.null のものを取得（未処理のものだけを効率よく処理する）
-        response = (
-            supabase.table("articles")
-            .select("id, title, ai_comment, summary")
-            .is_("ai_score", "null")
-            .execute()
-        )
-        return response.data
-    except Exception as e:
-        print(f"未処理記事の取得時にエラーが発生しました: {e}")
-        return []
 
 def evaluate_articles_with_gemini(articles: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
@@ -114,50 +98,4 @@ def evaluate_articles_with_gemini(articles: List[Dict[str, Any]]) -> List[Dict[s
         print(f"Gemini APIによる評価処理でエラーが発生しました: {e}")
         return []
 
-def update_articles_in_supabase(evaluated_results: List[Dict[str, Any]]):
-    """
-    Geminiから返ってきた評価結果（スコア・コメント）をSupabaseに一括反映する。
-    """
-    for item in evaluated_results:
-        article_id = item.get("id")
-        score = item.get("score")
-        comment = item.get("comment")
 
-        if article_id is None:
-            continue
-
-        try:
-            supabase.table("articles").update({
-                "ai_score": score,
-                "ai_comment": comment
-            }).eq("id", article_id).execute()
-            print(f"記事ID {article_id}: 更新成功 (Score: {score})")
-        except Exception as e:
-            print(f"記事ID {article_id} のDB更新に失敗しました: {e}")
-
-def run_ai_summarize_pipeline():
-    """
-    夜間バッチなどで実行されるメインのパイプライン関数
-    """
-    print("--- AI要約・スコアリングバッチ開始 ---")
-    
-    # 1. 未処理の記事を取得
-    unprocessed = get_unprocessed_articles()
-    if not unprocessed:
-        print("処理対象の新着記事はありません。")
-        return
-
-    print(f"{len(unprocessed)}件の未処理記事を検出しました。Geminiへ送信します...")
-
-    # 2. まとめてGeminiに評価させる（バッチ処理）
-    evaluated = evaluate_articles_with_gemini(unprocessed)
-    if not evaluated:
-        print("Geminiからの評価結果を取得できませんでした。")
-        return
-
-    # 3. Supabaseを更新
-    update_articles_in_supabase(evaluated)
-    print("--- AI要約・スコアリングバッチ完了 ---")
-
-if __name__ == "__main__":
-    run_ai_summarize_pipeline()
