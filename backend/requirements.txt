@@ -10,6 +10,7 @@ click==8.5.0
 cryptography==50.0.2
 deprecation==2.1.0
 fastapi==0.146.0
+feedparser
 google-genai
 h11==0.16.0
 h2==4.4.1
