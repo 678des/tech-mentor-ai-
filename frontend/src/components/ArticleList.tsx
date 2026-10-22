@@ -19,9 +19,10 @@ export function ArticleList({
           articlesData?.map((article) => (
             <article key={article.title} className="border p-4 my-2 rounded">
               <div>
-                <span>{article.url}</span>
+                <a href={article.url}>
+                  <h3>{article.title}</h3>
+                </a>
               </div>
-              <h3>{article.title}</h3>
               <p>{article.summary}</p>
               <div>
                 <button>AI要約を見る →</button>
