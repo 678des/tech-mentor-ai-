@@ -79,7 +79,6 @@ def evaluate_articles_with_gemini(articles: List[Dict[str, Any]]) -> List[Dict[s
 ニュース一覧:
 {json.dumps(articles_payload, ensure_ascii=False)}
 """
-
     try:
         # 構造化出力（JSON Mode）を指定してGeminiを呼び出し
         response = client.models.generate_content(
