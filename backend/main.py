@@ -32,7 +32,7 @@ allowed_origins = [url.strip() for url in frontend_url_env.split(",")]
 # React(Vite)からのリクエストを許可するCORS設定
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[allowed_origins],  # Viteのデフォルトポート
+    allow_origins=allowed_origins,  # Viteのデフォルトポート
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
