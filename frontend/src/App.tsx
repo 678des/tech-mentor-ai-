@@ -4,6 +4,8 @@ import { Header } from "./components/Header";
 import { useEffect, useState } from "react";
 import { BookOpen, RefreshCw } from "lucide-react";
 
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+
 // 1. FastAPIのレスポンス構造に合わせたTypeScriptの型定義
 export interface ResponseArticle {
   title: string;
@@ -16,19 +18,15 @@ function App() {
     null,
   );
   const [loading, setLoading] = useState<boolean>(true);
-  //const [error, setError] = useState<string | null>(null);
 
   const fetchScoring = async () => {
     try {
-      const response = await fetch(
-        "http://localhost:8000/api/run-ai-pipeline",
-        {
-          method: "POST", // ← ここにPOSTを指定する！
-          headers: {
-            "Content-Type": "application/json",
-          },
+      const response = await fetch(`${API_URL}/api/run-ai-pipeline`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
         },
-      );
+      });
       if (!response.ok) {
         throw new Error("記事のスコアリングに失敗しました");
       }
@@ -43,12 +41,12 @@ function App() {
   const fetchArticles = async () => {
     try {
       setLoading(true);
-      const response = await fetch("http://localhost:8000/api/articles");
+      const response = await fetch(`${API_URL}/api/articles`);
       if (!response.ok) {
         throw new Error("記事の取得に失敗しました");
       }
       const data = await response.json();
-      // FastAPIが { count: number, articles: ResponseArticle[] } の形で返している場合
+      // FastAPIが { count: number, articles: ResponseArticle[] } の形で返す前提
       setArticleData(data.articles);
     } catch (error) {
       console.error("Fetch error:", error);
@@ -58,33 +56,6 @@ function App() {
   };
   useEffect(() => {
     fetchArticles();
-  }, []);
-  // const fetchNews = () => {
-  //   setLoading(true);
-  //   //setError(null);
-
-  //   console.log("ニュースをフェッチします");
-  //   fetch("http://127.0.0.1:8000/api/news")
-  //     .then((res) => {
-  //       if (!res.ok) {
-  //         throw new Error(`サーバーエラー: ${res.status}`);
-  //       }
-  //       return res.json();
-  //     })
-  //     .then((data: ResponseArticle[]) => {
-  //       setArticleData(data);
-  //       console.log("取得したdata", data);
-  //       setLoading(false);
-  //     })
-  //     .catch((err) => {
-  //       console.error("API取得エラー:", err);
-  //       //setError("データの取得に失敗しました。");
-  //       setLoading(false);
-  //     });
-  // };
-
-  useEffect(() => {
-    //fetchNews();
   }, []);
 
   return (
@@ -111,20 +82,9 @@ function App() {
           disabled={loading}
           className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white font-medium rounded-lg shadow-sm transition"
         >
-          {/* <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} /> */}
           テストスコアリング
         </button>
       </header>
-
-      {/* 1. ローディング状態 */}
-      {/* {loading && (
-            <div className="flex flex-col items-center justify-center py-16 space-y-4">
-              <div className="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
-              <p className="text-slate-600 font-medium">
-                RSSフィードを収集中...
-              </p>
-            </div>
-          )} */}
 
       {/* --- 1. ヘッダー --- */}
       <Header />
@@ -132,7 +92,6 @@ function App() {
         {/* 【左】キャリア＆ロードマップ目標 */}
         <SidebarGoals />
         {/* 【右】ニュース記事リスト */}
-
         <ArticleList articlesData={articlesData ?? []} />
       </div>
     </div>
