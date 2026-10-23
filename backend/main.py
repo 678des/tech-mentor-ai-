@@ -1,3 +1,5 @@
+import os
+
 from dotenv import load_dotenv  
 load_dotenv()
 
@@ -25,11 +27,12 @@ class NewsResponse(BaseModel):
 
     
 app = FastAPI()
-
+frontend_url_env = os.getenv("FRONTEND_URL", "http://localhost:5173")
+allowed_origins = [url.strip() for url in frontend_url_env.split(",")]
 # React(Vite)からのリクエストを許可するCORS設定
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  # Viteのデフォルトポート
+    allow_origins=[allowed_origins],  # Viteのデフォルトポート
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
