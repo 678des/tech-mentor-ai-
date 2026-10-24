@@ -2,7 +2,8 @@ import { SidebarGoals } from "./components/SidebarGoals";
 import { ArticleList } from "./components/ArticleList";
 import { Header } from "./components/Header";
 import { useEffect, useState } from "react";
-import { BookOpen, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
+import SideBar from "./components/Sidebar";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -18,10 +19,11 @@ function App() {
     null,
   );
   const [loading, setLoading] = useState<boolean>(true);
+  const [activeTab, setActiveTab] = useState<string>("tab1");
 
   const fetchScoring = async () => {
     try {
-      const response = await fetch(`${API_URL}/api/run-ai-pipeline`, {
+      const response = await fetch(`${API_URL}api/run-ai-pipeline`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -41,7 +43,7 @@ function App() {
   const fetchArticles = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_URL}/api/articles`);
+      const response = await fetch(`${API_URL}api/articles`);
       if (!response.ok) {
         throw new Error("記事の取得に失敗しました");
       }
@@ -61,14 +63,7 @@ function App() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col">
       {/* ヘッダーエリア */}
-      <header className="flex items-center justify-between border-b pb-4 border-slate-200">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 flex items-center gap-2">
-            <BookOpen className="w-8 h-8 text-indigo-600" />
-            IT News for Student
-          </h1>
-          <p className="text-sm text-slate-500 mt-1">最新の技術ニュース</p>
-        </div>
+      {/* <header className="flex items-center justify-between border-b pb-4 border-slate-200">
         <button
           onClick={fetchArticles}
           disabled={loading}
@@ -84,15 +79,19 @@ function App() {
         >
           テストスコアリング
         </button>
-      </header>
+      </header> */}
 
       {/* --- 1. ヘッダー --- */}
-      <Header />
+      {/* <Header /> */}
       <div className="flex">
-        {/* 【左】キャリア＆ロードマップ目標 */}
-        <SidebarGoals />
-        {/* 【右】ニュース記事リスト */}
-        <ArticleList articlesData={articlesData ?? []} />
+        <aside>
+          <SideBar activeTab={activeTab} setActiveTab={setActiveTab}></SideBar>
+        </aside>
+        {activeTab === "tab1" ? (
+          <ArticleList articlesData={articlesData ?? []} />
+        ) : (
+          <SidebarGoals />
+        )}
       </div>
     </div>
   );

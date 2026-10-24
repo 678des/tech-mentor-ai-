@@ -63,6 +63,7 @@ export function SidebarGoals() {
         <div>
           <h3>🏆 最終目標</h3>
           <textarea
+            className="w-full"
             rows={2}
             value={finalGoals}
             onChange={(e) => setFinalGoals(e.target.value)}
@@ -81,6 +82,7 @@ export function SidebarGoals() {
                   {isCurrent && <span>📍 現在</span>}
                 </h4>
                 <textarea
+                  className="w-full"
                   rows={2}
                   value={item.value}
                   onChange={(e) => item.setter(e.target.value)}
@@ -88,6 +90,24 @@ export function SidebarGoals() {
               </div>
             );
           })}
+        </div>
+
+        {/*今週目標*/}
+        <div>
+          <h1>今週の目標</h1>
+          <li>
+            <li>目標画面に「今週の成果」と「使える時間」を追加し、保存する</li>
+            <li>
+              AIの固定プロフィールを、保存されたユーザー目標から組み立てる
+            </li>
+            <li>
+              記事ごとのAI出力に、目標との関係・読む優先度・次の一歩・所要時間を追加する
+            </li>
+            <li>画面に「今日の一歩」を1件だけ表示する</li>
+            <li>
+              完了・保留・興味が違う、のフィードバックを保存して次回の推薦に使う
+            </li>
+          </li>
         </div>
       </div>
     </aside>
