@@ -3,12 +3,12 @@ import os
 from dotenv import load_dotenv  
 load_dotenv()
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from ai import  evaluate_articles_with_gemini
-from crud import get_unprocessed_articles,update_articles_in_supabase,get_top_scored_articles
+from crud import get_unprocessed_articles,update_articles_in_supabase,get_top_scored_articles,update_article_user_state
 from pydantic import BaseModel
-from typing import List
+from typing import List, Literal
 from rss import get_news
 
 
@@ -24,6 +24,11 @@ class NewsResponse(BaseModel):
     mentor_message: str            # 最後のメンターメッセージ
     selected_articles: List[SelectedArticle]  # AIが選んだ3〜5件
     all_candidates_count: int      # 取得した全記事数などのメタ情報
+
+
+class ArticleUserStateUpdate(BaseModel):
+    save_type: Literal["later", "important"] | None = None
+    user_note: str | None = None
 
     
 app = FastAPI()
@@ -56,6 +61,20 @@ def get_articles_endpoint():
         "count": len(articles),
         "articles": articles
     }
+
+
+@app.patch("/api/articles/{article_id}/user-state")
+def update_article_state_endpoint(article_id: int, body: ArticleUserStateUpdate):
+    """記事の保存タイプと自分用メモを保存する。save_type=nullで保存を解除する。"""
+    try:
+        article = update_article_user_state(article_id, body.save_type, body.user_note)
+        if article is None:
+            raise HTTPException(status_code=404, detail="記事が見つかりません")
+        return article
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"記事の保存に失敗しました: {e}")
 
 
 

@@ -88,3 +88,18 @@ def update_articles_in_supabase(evaluated_results: List[Dict[str, Any]]):
             print(f"記事ID {article_id}: 更新成功 (Score: {score})")
         except Exception as e:
             print(f"記事ID {article_id} のDB更新に失敗しました: {e}")
+
+
+def update_article_user_state(
+    article_id: int,
+    save_type: str | None,
+    user_note: str | None,
+) -> Dict[str, Any] | None:
+    """試作用に記事の保存タイプと自分用メモを更新する。"""
+    response = (
+        supabase.table("articles")
+        .update({"save_type": save_type, "user_note": user_note})
+        .eq("id", article_id)
+        .execute()
+    )
+    return response.data[0] if response.data else None
