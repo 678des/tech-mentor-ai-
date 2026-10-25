@@ -1,5 +1,5 @@
 from ai import evaluate_articles_with_gemini
-from crud import get_unprocessed_articles,update_articles_in_supabase
+from crud import get_unprocessed_articles, get_user_context, update_articles_in_supabase
 from rss import get_news
 
 def run_batch_pipeline():
@@ -22,7 +22,8 @@ def run_batch_pipeline():
     print(f"{len(unprocessed)}件の未処理記事を検出しました。Geminiへ送信します...")
 
     # 2. まとめてGeminiに評価させる（バッチ処理）
-    evaluated = evaluate_articles_with_gemini(unprocessed)
+    user_context = get_user_context()
+    evaluated = evaluate_articles_with_gemini(unprocessed, user_context)
     if not evaluated:
         print("Geminiからの評価結果を取得できませんでした。")
         return

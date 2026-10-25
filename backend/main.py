@@ -7,7 +7,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from ai import  evaluate_articles_with_gemini
 from crud import *
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Literal
 from rss import get_news
 
@@ -30,6 +30,15 @@ class ArticleUserStateUpdate(BaseModel):
     save_type: Literal["later", "important","done"] | None = None
     user_note: str | None = None
 
+
+class UserContextUpdate(BaseModel):
+    career_goal: str = ""
+    current_focus: str = ""
+    subjects: List[str] = Field(default_factory=list)
+    interests: List[str] = Field(default_factory=list)
+    current_situation: str = ""
+    projects: List[str] = Field(default_factory=list)
+
     
 app = FastAPI()
 frontend_url_env = os.getenv("FRONTEND_URL", "http://localhost:5173")
@@ -47,6 +56,22 @@ app.add_middleware(
 @app.get("/api/news")
 def get_news_endpoint():
     return get_news()
+
+
+@app.get("/api/user-context")
+def get_user_context_endpoint():
+    try:
+        return get_user_context()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"ユーザー情報の取得に失敗しました: {e}")
+
+
+@app.put("/api/user-context")
+def save_user_context_endpoint(body: UserContextUpdate):
+    try:
+        return save_user_context(body.model_dump())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"ユーザー情報の保存に失敗しました: {e}")
 
 
 @app.get("/api/articles")
@@ -102,7 +127,8 @@ def trigger_ai_pipeline():
             return {"status": "ok", "message": "処理対象の新着記事はありません。", "count": 0}
 
         # 2. まとめてGeminiに評価させる
-        evaluated = evaluate_articles_with_gemini(unprocessed)
+        user_context = get_user_context()
+        evaluated = evaluate_articles_with_gemini(unprocessed, user_context)
         if not evaluated:
             return {"status": "error", "message": "Geminiからの評価取得に失敗しました。"}
 

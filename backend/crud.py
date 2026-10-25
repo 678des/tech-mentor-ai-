@@ -2,6 +2,35 @@
 from typing import List, Dict, Set,Any
 from database import supabase
 
+DEFAULT_USER_CONTEXT: Dict[str, Any] = {
+    "id": 1,
+    "career_goal": "フルスタックWebエンジニアまたはクラウドインフラエンジニアを目指す",
+    "current_focus": "情報を集める不安を減らし、自分のペースで学びや開発を続ける",
+    "subjects": [],
+    "interests": [],
+    "current_situation": "技術情報を見て不安に飲まれず、事実を受け止めながら自分のペースで前に進みたい",
+    "projects": [],
+}
+
+
+def get_user_context() -> Dict[str, Any]:
+    """唯一のユーザーコンテクストを取得する。未作成なら空の初期値を返す。"""
+    response = (
+        supabase.table("user_context")
+        .select("*")
+        .eq("id", 1)
+        .maybe_single()
+        .execute()
+    )
+    return response.data or DEFAULT_USER_CONTEXT.copy()
+
+
+def save_user_context(context: Dict[str, Any]) -> Dict[str, Any]:
+    """唯一のユーザーコンテクストを作成または更新する。"""
+    payload = {**context, "id": 1}
+    supabase.table("user_context").upsert(payload, on_conflict="id").execute()
+    return get_user_context()
+
 def get_all_urls() -> Set[str]:
     """
     Supabaseの `articles` テーブルに保存されている全記事のURLを取得する。

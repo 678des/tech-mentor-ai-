@@ -1,115 +1,177 @@
-import { useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
+
+const API_URL = (
+  import.meta.env.VITE_API_URL || "http://localhost:8000"
+).replace(/\/+$/, "");
+
+type UserContext = {
+  career_goal: string;
+  current_focus: string;
+  subjects: string[];
+  interests: string[];
+  current_situation: string;
+  projects: string[];
+};
+
+const emptyContext: UserContext = {
+  career_goal: "",
+  current_focus: "",
+  subjects: [],
+  interests: [],
+  current_situation: "",
+  projects: [],
+};
+
+function linesToList(value: string): string[] {
+  return value
+    .split("\n")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
 
 export function SidebarGoals() {
-  // 卒業年度（例: 2030年3月卒業）
-  const [userGraduationYear] = useState<number>(2030);
+  const [context, setContext] = useState<UserContext>(emptyContext);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
 
-  // 現在の年から動的に学年を計算するロジック
-  const currentYear = new Date().getFullYear();
-  const currentMonth = new Date().getMonth() + 1; // 1-12
-  const academicYear = currentMonth < 4 ? currentYear - 1 : currentYear;
-  const entranceYear = userGraduationYear - 4;
-  const calculatedGrade = academicYear - entranceYear + 1;
-  const nowGrade = Math.min(Math.max(calculatedGrade, 1), 4);
+  useEffect(() => {
+    const loadContext = async () => {
+      try {
+        const response = await fetch(`${API_URL}/api/user-context`);
+        if (!response.ok) throw new Error("ユーザー情報を読み込めませんでした。");
+        const data = await response.json();
+        setContext({ ...emptyContext, ...data });
+      } catch (error) {
+        setMessage(
+          error instanceof Error ? error.message : "読み込みに失敗しました。",
+        );
+      } finally {
+        setLoading(false);
+      }
+    };
+    void loadContext();
+  }, []);
 
-  const [finalGoals, setFinalGoals] = useState<string>(
-    "フルスタックエンジニアとして独立・活躍する",
-  );
-  const [firstGoals, setFirstGoals] = useState<string>(
-    "ある程度のデザイン思考と、インフラを使ったポートフォリオを1作品作り上げる（Terraform + AWSなどの自動化、見やすいREADME）",
-  );
-  const [secondGoals, setSecondGoals] = useState<string>(
-    "Wantedlyなどのアプリ開発インターン、または大学の少数精鋭インターンに合格して参加する",
-  );
-  const [thirdGoals, setThirdGoals] = useState<string>(
-    "本命企業からの内定（内々定）を勝ち取る",
-  );
-  const [fourthGoals, setFourthGoals] = useState<string>(
-    "独立できるレベルのビジネス知識とアプリケーション開発技術を身につける",
-  );
+  const saveContext = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSaving(true);
+    setMessage("");
+    try {
+      const response = await fetch(`${API_URL}/api/user-context`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(context),
+      });
+      if (!response.ok) throw new Error("保存できませんでした。もう一度お試しください。");
+      const savedContext = await response.json();
+      setContext({ ...emptyContext, ...savedContext });
+      setMessage("保存しました。これからの記事評価に反映されます。");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "保存に失敗しました。");
+    } finally {
+      setSaving(false);
+    }
+  };
 
-  const gradeList = [
-    {
-      grade: 1,
-      label: "1年生の目標",
-      value: firstGoals,
-      setter: setFirstGoals,
-    },
-    {
-      grade: 2,
-      label: "2年生の目標",
-      value: secondGoals,
-      setter: setSecondGoals,
-    },
-    {
-      grade: 3,
-      label: "3年生の目標",
-      value: thirdGoals,
-      setter: setThirdGoals,
-    },
-    {
-      grade: 4,
-      label: "4年生の目標",
-      value: fourthGoals,
-      setter: setFourthGoals,
-    },
-  ];
+  const updateText = (field: keyof UserContext, value: string) => {
+    setContext((current) => ({
+      ...current,
+      [field]: field === "subjects" || field === "interests" || field === "projects"
+        ? linesToList(value)
+        : value,
+    }));
+  };
+
+  if (loading) return <main className="flex-1 p-6">ユーザー情報を読み込み中…</main>;
 
   return (
-    <aside className="flex-1 w-48 p-4 bg-gray-100">
-      <div>
-        <h1>test</h1>
-        {/* 最終目標 */}
-        <div>
-          <h3>🏆 最終目標</h3>
-          <textarea
-            className="w-full"
-            rows={2}
-            value={finalGoals}
-            onChange={(e) => setFinalGoals(e.target.value)}
-          />
-        </div>
+    <main className="flex-1 bg-white p-6">
+      <div className="mx-auto max-w-3xl">
+        <h1 className="text-2xl font-semibold">あなたのコンテクスト</h1>
+        <p className="mt-2 text-sm text-slate-600">
+          ここに保存した情報を、新しい記事のスコアリング時にAIへ渡します。記事と無理に結びつけず、関係が薄いものは低く評価するよう指示します。
+        </p>
 
-        {/* 各学年の目標一覧 */}
-        <div>
-          {gradeList.map((item) => {
-            const isCurrent = item.grade === nowGrade;
+        <form onSubmit={saveContext} className="mt-6 space-y-5">
+          <label className="block text-sm font-medium">
+            長期的に目指したいこと
+            <textarea
+              rows={2}
+              value={context.career_goal}
+              onChange={(event) => updateText("career_goal", event.target.value)}
+              className="mt-1 w-full rounded border border-slate-300 p-3"
+              placeholder="例：フルスタックWebエンジニアを目指す"
+            />
+          </label>
 
-            return (
-              <div key={item.grade}>
-                <h4>
-                  {item.label}
-                  {isCurrent && <span>📍 現在</span>}
-                </h4>
-                <textarea
-                  className="w-full"
-                  rows={2}
-                  value={item.value}
-                  onChange={(e) => item.setter(e.target.value)}
-                />
-              </div>
-            );
-          })}
-        </div>
+          <label className="block text-sm font-medium">
+            今の重点・関心
+            <textarea
+              rows={3}
+              value={context.current_focus}
+              onChange={(event) => updateText("current_focus", event.target.value)}
+              className="mt-1 w-full rounded border border-slate-300 p-3"
+              placeholder="今気になっていること、学びたいこと"
+            />
+          </label>
 
-        {/*今週目標*/}
-        <div>
-          <h1>今週の目標</h1>
-          <li>
-            <li>目標画面に「今週の成果」と「使える時間」を追加し、保存する</li>
-            <li>
-              AIの固定プロフィールを、保存されたユーザー目標から組み立てる
-            </li>
-            <li>
-              記事ごとのAI出力に、目標との関係・読む優先度・次の一歩・所要時間を追加する
-            </li>
-            <li>画面に「今日の一歩」を1件だけ表示する</li>
-            <li>
-              完了・保留・興味が違う、のフィードバックを保存して次回の推薦に使う
-            </li>
-          </li>
-        </div>
+          <label className="block text-sm font-medium">
+            興味のあるテーマ（1行に1つ）
+            <textarea
+              rows={4}
+              value={context.interests.join("\n")}
+              onChange={(event) => updateText("interests", event.target.value)}
+              className="mt-1 w-full rounded border border-slate-300 p-3"
+              placeholder={"TypeScript\nAIとエンジニアのキャリア\nクラウドインフラ"}
+            />
+          </label>
+
+          <label className="block text-sm font-medium">
+            学んでいる科目・技術（1行に1つ）
+            <textarea
+              rows={4}
+              value={context.subjects.join("\n")}
+              onChange={(event) => updateText("subjects", event.target.value)}
+              className="mt-1 w-full rounded border border-slate-300 p-3"
+              placeholder={"データ構造とアルゴリズム\nPython\nLinux"}
+            />
+          </label>
+
+          <label className="block text-sm font-medium">
+            進行中のプロジェクト（1行に1つ）
+            <textarea
+              rows={3}
+              value={context.projects.join("\n")}
+              onChange={(event) => updateText("projects", event.target.value)}
+              className="mt-1 w-full rounded border border-slate-300 p-3"
+              placeholder="今取り組んでいる開発や学習"
+            />
+          </label>
+
+          <label className="block text-sm font-medium">
+            情報を読むときの状況や希望（任意）
+            <textarea
+              rows={3}
+              value={context.current_situation}
+              onChange={(event) => updateText("current_situation", event.target.value)}
+              className="mt-1 w-full rounded border border-slate-300 p-3"
+              placeholder="例：不安をあおらず、事実と推測を分けて整理したい"
+            />
+          </label>
+
+          <div className="flex items-center gap-4">
+            <button
+              type="submit"
+              disabled={saving}
+              className="rounded bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {saving ? "保存中…" : "保存する"}
+            </button>
+            {message && <p role="status" className="text-sm text-slate-600">{message}</p>}
+          </div>
+        </form>
       </div>
-    </aside>
+    </main>
   );
 }
