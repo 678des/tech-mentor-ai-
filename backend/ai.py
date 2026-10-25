@@ -14,6 +14,44 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 client = genai.Client(api_key=GEMINI_API_KEY)
 
 
+def generate_context_advice(user_context: Dict[str, Any]) -> Dict[str, Any]:
+    """ユーザーコンテクストから、情報との向き合い方を提案する。"""
+    system_instruction = """
+あなたは、ユーザーが技術情報に追われず、自分で情報との距離を選べるよう支援するリサーチメンターです。
+渡されたユーザーコンテクストを読み、今見る価値のあるテーマを2〜3個提案してください。
+具体的な記事を読んだり検索したりしたふりはせず、探す記事の種類や検索語の案を出してください。
+各テーマについて、なぜ今そのテーマを見るとよさそうか、どんな切り口の記事を探すか、検索語を示してください。
+記事の内容を必ず実装や開発タスクに結びつけないでください。情報共有、基礎知識、経験談、キャリアを考える記事も候補に含めてください。
+読後の選択肢には「少し試す」「頭の片隅に置く」「大切に保存する」「今日は閉じる」を含め、行動を強制しないでください。
+不安をあおらず、記事だけで将来や就職可能性を断定しないでください。提案は本人が選ぶための材料として、簡潔で具体的にしてください。
+
+必ず次のJSON形式だけで返してください:
+{
+  "overview": "今の状況に合わせた短い導入",
+  "themes": [
+    {
+      "theme": "注目テーマ",
+      "why": "見る価値がありそうな理由",
+      "article_angles": ["探す記事の切り口"],
+      "search_queries": ["検索語の案"]
+    }
+  ],
+  "after_reading_choices": ["少し試す", "頭の片隅に置く", "大切に保存する", "今日は閉じる"],
+  "reminder": "情報との距離を自分で決めてよいことを伝える一言"
+}
+"""
+    response = client.models.generate_content(
+        model="gemini-3.5-flash-lite",
+        contents=f"ユーザーコンテクスト:\n{json.dumps(user_context, ensure_ascii=False)}",
+        config=types.GenerateContentConfig(
+            system_instruction=system_instruction,
+            response_mime_type="application/json",
+            temperature=0.4,
+        ),
+    )
+    return json.loads(response.text)
+
+
 def evaluate_articles_with_gemini(
     articles: List[Dict[str, Any]],
     user_context: Dict[str, Any],

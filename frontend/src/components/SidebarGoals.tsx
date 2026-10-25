@@ -13,6 +13,18 @@ type UserContext = {
   projects: string[];
 };
 
+type ContextAdvice = {
+  overview: string;
+  themes: {
+    theme: string;
+    why: string;
+    article_angles: string[];
+    search_queries: string[];
+  }[];
+  after_reading_choices: string[];
+  reminder: string;
+};
+
 const emptyContext: UserContext = {
   career_goal: "",
   current_focus: "",
@@ -34,6 +46,9 @@ export function SidebarGoals() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [generatingAdvice, setGeneratingAdvice] = useState(false);
+  const [advice, setAdvice] = useState<ContextAdvice | null>(null);
+  const [adviceError, setAdviceError] = useState("");
 
   useEffect(() => {
     const loadContext = async () => {
@@ -53,24 +68,47 @@ export function SidebarGoals() {
     void loadContext();
   }, []);
 
+  const persistContext = async (): Promise<UserContext> => {
+    const response = await fetch(`${API_URL}/api/user-context`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(context),
+    });
+    if (!response.ok) throw new Error("保存できませんでした。もう一度お試しください。");
+    const savedContext = { ...emptyContext, ...(await response.json()) };
+    setContext(savedContext);
+    return savedContext;
+  };
+
   const saveContext = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSaving(true);
     setMessage("");
     try {
-      const response = await fetch(`${API_URL}/api/user-context`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(context),
-      });
-      if (!response.ok) throw new Error("保存できませんでした。もう一度お試しください。");
-      const savedContext = await response.json();
-      setContext({ ...emptyContext, ...savedContext });
+      await persistContext();
       setMessage("保存しました。これからの記事評価に反映されます。");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "保存に失敗しました。");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const createAdvice = async () => {
+    setGeneratingAdvice(true);
+    setAdviceError("");
+    setMessage("");
+    try {
+      await persistContext();
+      const response = await fetch(`${API_URL}/api/user-context/advice`, {
+        method: "POST",
+      });
+      if (!response.ok) throw new Error("提案を作れませんでした。少し待ってから再度お試しください。");
+      setAdvice(await response.json());
+    } catch (error) {
+      setAdviceError(error instanceof Error ? error.message : "提案の作成に失敗しました。");
+    } finally {
+      setGeneratingAdvice(false);
     }
   };
 
@@ -171,6 +209,62 @@ export function SidebarGoals() {
             {message && <p role="status" className="text-sm text-slate-600">{message}</p>}
           </div>
         </form>
+
+        <section className="mt-10 border-t border-slate-200 pt-6">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-semibold">情報との向き合い方を相談する</h2>
+              <p className="mt-1 max-w-2xl text-sm text-slate-600">
+                保存したコンテクストから、今見るテーマや探す記事の切り口を提案します。具体的な記事を検索する機能ではありません。開発タスクへの結びつけも強制しません。
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void createAdvice()}
+              disabled={generatingAdvice || saving}
+              className="rounded bg-indigo-600 px-4 py-2 font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            >
+              {generatingAdvice ? "考えています…" : advice ? "もう一度相談する" : "AIに相談する"}
+            </button>
+          </div>
+
+          {adviceError && <p role="alert" className="mt-4 text-sm text-red-600">{adviceError}</p>}
+
+          {advice && (
+            <div className="mt-6 space-y-5">
+              <p className="rounded-lg bg-indigo-50 p-4 text-slate-800">{advice.overview}</p>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                {advice.themes.map((item, index) => (
+                  <article key={`${item.theme}-${index}`} className="rounded-lg border border-slate-200 p-4">
+                    <h3 className="font-semibold">{item.theme}</h3>
+                    <p className="mt-2 text-sm text-slate-700">{item.why}</p>
+                    <h4 className="mt-4 text-sm font-medium">探す記事の切り口</h4>
+                    <ul className="mt-1 list-inside list-disc text-sm text-slate-600">
+                      {item.article_angles.map((angle, angleIndex) => <li key={`${angle}-${angleIndex}`}>{angle}</li>)}
+                    </ul>
+                    <h4 className="mt-4 text-sm font-medium">検索語の案</h4>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {item.search_queries.map((query, queryIndex) => (
+                        <span key={`${query}-${queryIndex}`} className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">{query}</span>
+                      ))}
+                    </div>
+                  </article>
+                ))}
+              </div>
+
+              <div className="rounded-lg border border-slate-200 p-4">
+                <h3 className="font-medium">読んだ後は、どれを選んでも大丈夫</h3>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {advice.after_reading_choices.map((choice, index) => (
+                    <span key={`${choice}-${index}`} className="rounded-full border border-slate-300 px-3 py-1 text-sm">{choice}</span>
+                  ))}
+                </div>
+                <p className="mt-4 text-sm text-slate-600">{advice.reminder}</p>
+              </div>
+            </div>
+          )}
+        </section>
       </div>
     </main>
   );

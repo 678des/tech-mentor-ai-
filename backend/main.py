@@ -5,7 +5,7 @@ load_dotenv()
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from ai import  evaluate_articles_with_gemini
+from ai import evaluate_articles_with_gemini, generate_context_advice
 from crud import *
 from pydantic import BaseModel, Field
 from typing import List, Literal
@@ -38,6 +38,20 @@ class UserContextUpdate(BaseModel):
     interests: List[str] = Field(default_factory=list)
     current_situation: str = ""
     projects: List[str] = Field(default_factory=list)
+
+
+class ContextAdviceTheme(BaseModel):
+    theme: str
+    why: str
+    article_angles: List[str]
+    search_queries: List[str]
+
+
+class ContextAdviceResponse(BaseModel):
+    overview: str
+    themes: List[ContextAdviceTheme]
+    after_reading_choices: List[str]
+    reminder: str
 
     
 app = FastAPI()
@@ -72,6 +86,15 @@ def save_user_context_endpoint(body: UserContextUpdate):
         return save_user_context(body.model_dump())
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"ユーザー情報の保存に失敗しました: {e}")
+
+
+@app.post("/api/user-context/advice", response_model=ContextAdviceResponse)
+def get_user_context_advice_endpoint():
+    try:
+        user_context = get_user_context()
+        return generate_context_advice(user_context)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"情報の見方の提案に失敗しました: {e}")
 
 
 @app.get("/api/articles")
