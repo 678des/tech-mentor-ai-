@@ -28,6 +28,16 @@ export default function SideBar({
       >
         🎯 目標・ロードマップ
       </button>
+      <button
+        onClick={() => setActiveTab("tab3")}
+        className={`flex-1 py-2 text-center font-medium transition-colors ${
+          activeTab === "tab3"
+            ? "border-b-2 border-blue-500 text-blue-600"
+            : "text-gray-500 hover:text-gray-700"
+        }`}
+      >
+        保存記事
+      </button>
     </div>
   );
 }

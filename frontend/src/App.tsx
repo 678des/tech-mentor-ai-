@@ -3,7 +3,9 @@ import { ArticleList } from "./components/ArticleList";
 import { useEffect, useState } from "react";
 import SideBar from "./components/Sidebar";
 
-const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/+$/, "");
+const API_URL = (
+  import.meta.env.VITE_API_URL || "http://localhost:8000"
+).replace(/\/+$/, "");
 
 // 1. FastAPIのレスポンス構造に合わせたTypeScriptの型定義
 export interface ResponseArticle {
@@ -11,7 +13,7 @@ export interface ResponseArticle {
   title: string;
   url: string;
   summary: string;
-  save_type: "later" | "important" | null;
+  save_type: "later" | "important" | "done" | null;
   user_note: string | null;
 }
 
@@ -19,6 +21,9 @@ function App() {
   const [articlesData, setArticleData] = useState<ResponseArticle[] | null>(
     null,
   );
+  const [importantArticlesData, setImportantArticlesData] = useState<
+    ResponseArticle[] | null
+  >(null);
   const [activeTab, setActiveTab] = useState<string>("tab1");
 
   const fetchArticles = async () => {
@@ -34,8 +39,22 @@ function App() {
       console.error("Fetch error:", error);
     }
   };
+  const fetchImportantArticles = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/articles/important`);
+      if (!response.ok) {
+        throw new Error("記事の取得に失敗しました");
+      }
+      const data = await response.json();
+      // FastAPIが { count: number, articles: ResponseArticle[] } の形で返す前提
+      setImportantArticlesData(data.articles);
+    } catch (error) {
+      console.error("Fetch error:", error);
+    }
+  };
   useEffect(() => {
     fetchArticles();
+    fetchImportantArticles();
   }, []);
 
   return (
@@ -44,19 +63,43 @@ function App() {
         <aside>
           <SideBar activeTab={activeTab} setActiveTab={setActiveTab}></SideBar>
         </aside>
-        {activeTab === "tab1" ? (
+        {
+          activeTab === "tab1" && (
+            <ArticleList
+              articlesData={articlesData ?? []}
+              onArticleUpdated={(updatedArticle) => {
+                setArticleData(
+                  (current) =>
+                    current?.map((article) =>
+                      article.id === updatedArticle.id
+                        ? updatedArticle
+                        : article,
+                    ) ?? null,
+                );
+              }}
+            />
+          )
+
+          // <SidebarGoals />
+        }
+        {activeTab === "tab2" && <SidebarGoals />}
+        {activeTab === "tab3" && (
           <ArticleList
-            articlesData={articlesData ?? []}
+            articlesData={importantArticlesData ?? []}
             onArticleUpdated={(updatedArticle) => {
-              setArticleData((current) =>
-                current?.map((article) =>
-                  article.id === updatedArticle.id ? updatedArticle : article,
-                ) ?? null,
+              setImportantArticlesData(
+                (current) =>
+                  current
+                    ?.map((article) =>
+                      article.id === updatedArticle.id
+                        ? updatedArticle
+                        : article,
+                    )
+                    .filter((article) => article.save_type === "important") ??
+                    null,
               );
             }}
           />
-        ) : (
-          <SidebarGoals />
         )}
       </div>
     </div>

@@ -6,7 +6,7 @@ load_dotenv()
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from ai import  evaluate_articles_with_gemini
-from crud import get_unprocessed_articles,update_articles_in_supabase,get_top_scored_articles,update_article_user_state
+from crud import *
 from pydantic import BaseModel
 from typing import List, Literal
 from rss import get_news
@@ -27,7 +27,7 @@ class NewsResponse(BaseModel):
 
 
 class ArticleUserStateUpdate(BaseModel):
-    save_type: Literal["later", "important"] | None = None
+    save_type: Literal["later", "important","done"] | None = None
     user_note: str | None = None
 
     
@@ -47,8 +47,6 @@ app.add_middleware(
 @app.get("/api/news")
 def get_news_endpoint():
     return get_news()
-  
-
 
 
 @app.get("/api/articles")
@@ -61,6 +59,17 @@ def get_articles_endpoint():
         "count": len(articles),
         "articles": articles
     }
+
+@app.get("/api/articles/important")
+def get_important_articles_endpoint():
+    try:
+        articles = get_important_articles()
+        return {"count": len(articles), "articles": articles}
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"重要記事の取得に失敗しました: {e}",
+        )
 
 
 @app.patch("/api/articles/{article_id}/user-state")

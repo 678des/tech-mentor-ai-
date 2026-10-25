@@ -67,6 +67,16 @@ def get_unprocessed_articles() -> List[Dict[str, Any]]:
         return []
 
 
+def get_important_articles():
+    response = (
+        supabase.table("articles")
+        .select("*")
+        .eq("save_type", "important")
+        .order("ai_score", desc=True)
+        .execute()
+    )
+    return response.data
+
 
 def update_articles_in_supabase(evaluated_results: List[Dict[str, Any]]):
     """

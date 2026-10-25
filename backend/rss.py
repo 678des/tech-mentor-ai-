@@ -7,7 +7,6 @@ from typing import Any, List
 from crud import get_all_urls,save_articles
 
 def get_news():
-    
     checked_urls = get_all_urls()
     # 3. RSSフィードのURLリスト
     rss_urls = [
