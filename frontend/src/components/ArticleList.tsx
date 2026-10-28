@@ -11,12 +11,14 @@ export function ArticleList({
   onArticleAdded,
   showSaveByUrl = false,
   editableTitle = false,
+  refreshableSummary = false,
 }: {
   articlesData: ResponseArticle[];
   onArticleUpdated: (article: ResponseArticle) => void;
   onArticleAdded?: (article: ResponseArticle) => void;
   showSaveByUrl?: boolean;
   editableTitle?: boolean;
+  refreshableSummary?: boolean;
 }) {
   const [savingIds, setSavingIds] = useState<number[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -26,6 +28,34 @@ export function ArticleList({
   const [editingTitleId, setEditingTitleId] = useState<number | null>(null);
   const [titleDraft, setTitleDraft] = useState("");
   const [savingTitleId, setSavingTitleId] = useState<number | null>(null);
+  const [refreshingSummaryId, setRefreshingSummaryId] = useState<number | null>(null);
+  const [summaryMessage, setSummaryMessage] = useState<string | null>(null);
+
+  const refreshArticleSummary = async (article: ResponseArticle) => {
+    setRefreshingSummaryId(article.id);
+    setError(null);
+    setSummaryMessage(null);
+    try {
+      const response = await fetch(
+        `${API_URL}/api/articles/${article.id}/refresh-summary`,
+        { method: "POST" },
+      );
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.detail || "概要を再取得できませんでした。");
+      }
+      onArticleUpdated(data.article);
+      setSummaryMessage(`「${data.article.title}」の概要を更新しました。`);
+    } catch (refreshError) {
+      setError(
+        refreshError instanceof Error
+          ? refreshError.message
+          : "概要を再取得できませんでした。",
+      );
+    } finally {
+      setRefreshingSummaryId(null);
+    }
+  };
 
   const saveArticleTitle = async (article: ResponseArticle) => {
     const title = titleDraft.trim();
@@ -146,6 +176,11 @@ export function ArticleList({
             {error}
           </p>
         )}
+        {summaryMessage && (
+          <p role="status" className="text-sm text-emerald-700">
+            {summaryMessage}
+          </p>
+        )}
         {articlesData ? (
           articlesData?.map((article) => (
             <article
@@ -207,6 +242,16 @@ export function ArticleList({
                 )}
               </div>
               <p className="text-sm text-slate-600">{article.summary}</p>
+              {refreshableSummary && (
+                <button
+                  type="button"
+                  onClick={() => void refreshArticleSummary(article)}
+                  disabled={refreshingSummaryId !== null}
+                  className="rounded border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {refreshingSummaryId === article.id ? "取得中…" : "概要を再取得"}
+                </button>
+              )}
               <div className="flex flex-wrap items-center gap-2">
                 <label className="text-sm" htmlFor={`save-type-${article.id}`}>
                   保存タイプ

@@ -3,6 +3,7 @@ import { ArticleList } from "./components/ArticleList";
 import { useEffect, useState } from "react";
 import SideBar from "./components/Sidebar";
 import { QiitaSearch } from "./components/QiitaSearch";
+import { VectorSearch } from "./components/VectorSearch";
 
 const API_URL = (
   import.meta.env.VITE_API_URL || "http://localhost:8000"
@@ -89,6 +90,7 @@ function App() {
             articlesData={importantArticlesData ?? []}
             showSaveByUrl
             editableTitle
+            refreshableSummary
             onArticleAdded={(savedArticle) => {
               setImportantArticlesData((current) => {
                 const articles = current ?? [];
@@ -121,6 +123,7 @@ function App() {
           />
         )}
         {activeTab === "tab4" && <QiitaSearch />}
+        {activeTab === "tab5" && <VectorSearch />}
       </div>
     </div>
   );
