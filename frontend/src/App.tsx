@@ -2,6 +2,7 @@ import { SidebarGoals } from "./components/SidebarGoals";
 import { ArticleList } from "./components/ArticleList";
 import { useEffect, useState } from "react";
 import SideBar from "./components/Sidebar";
+import { QiitaSearch } from "./components/QiitaSearch";
 
 const API_URL = (
   import.meta.env.VITE_API_URL || "http://localhost:8000"
@@ -101,6 +102,7 @@ function App() {
             }}
           />
         )}
+        {activeTab === "tab4" && <QiitaSearch />}
       </div>
     </div>
   );

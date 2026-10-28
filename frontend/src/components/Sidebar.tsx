@@ -38,6 +38,16 @@ export default function SideBar({
       >
         保存記事
       </button>
+      <button
+        onClick={() => setActiveTab("tab4")}
+        className={`flex-1 py-2 text-center font-medium transition-colors ${
+          activeTab === "tab4"
+            ? "border-b-2 border-blue-500 text-blue-600"
+            : "text-gray-500 hover:text-gray-700"
+        }`}
+      >
+        🔎 Qiita検索
+      </button>
     </div>
   );
 }
