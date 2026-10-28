@@ -2,32 +2,61 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import feedparser
+from bs4 import BeautifulSoup
 from typing import Any, List
 
 from crud import get_all_urls,save_articles
+from qiita import get_qiita_article_by_url
+
+MAX_SUMMARY_LENGTH = 2000
+RSS_URLS = [
+    "https://zenn.dev/feed",
+    "https://qiita.com/popular-items/feed",
+]
+
+
+def clean_summary(raw_summary: str | None) -> str:
+    """Convert an RSS summary to readable text and retain a useful excerpt."""
+    if not raw_summary:
+        return ""
+    text = BeautifulSoup(raw_summary, "html.parser").get_text(" ", strip=True)
+    return " ".join(text.split())[:MAX_SUMMARY_LENGTH]
+
+
+def refresh_article_summary(article: dict[str, Any]) -> dict[str, Any]:
+    """Refresh only through an official API supported for the article source."""
+    article_url = article.get("url")
+    if not article_url:
+        raise ValueError("記事URLがありません")
+
+    from urllib.parse import urlparse
+
+    hostname = (urlparse(article_url).hostname or "").lower()
+    if hostname in {"qiita.com", "www.qiita.com"}:
+        return get_qiita_article_by_url(article_url)
+
+    raise LookupError(
+        "この記事提供元には概要更新用の公式APIを設定していないため、更新しませんでした。"
+    )
 
 def get_news():
     checked_urls = get_all_urls()
     # 3. RSSフィードのURLリスト
-    rss_urls = [
-    "https://zenn.dev/feed",                  # Zenn（技術トレンド）
-    "https://qiita.com/popular-items/feed",     # Qiita（人気記事）
-    ]
     candidates: List[dict[str, str]] = []
-    for url in rss_urls:
+    for url in RSS_URLS:
         feed: Any = feedparser.parse(url)
         for entry in feed.entries[:25]:
             title = entry.title
             link = entry.link
-            # 概要を取得（HTMLタグ除去や長さ調整）
-            summary = getattr(entry, 'summary', '概要なし')
+            # RSS概要はフィードに含まれる範囲を活かし、最大2000文字保存する。
+            summary = clean_summary(getattr(entry, 'summary', None))
 
             if link in checked_urls:continue
             print("タイトル",title,link,end="\n")
             candidates.append({
                 "title": title,
                 "url": link,
-                "summary": summary[:200]  # 冒頭200文字程度
+                "summary": summary
             })
 
     # タイトルの重複排除

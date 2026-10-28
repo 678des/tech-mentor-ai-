@@ -65,6 +65,27 @@ def save_articles(articles: List[Dict[str, str]]) -> None:
         print(f"記事保存時にエラーが発生しました: {e}")
 
 
+def get_article_by_id(article_id: int) -> Dict[str, Any] | None:
+    response = (
+        supabase.table("articles")
+        .select("id, title, url, summary")
+        .eq("id", article_id)
+        .maybe_single()
+        .execute()
+    )
+    return response.data
+
+
+def update_article_summary(article_id: int, title: str, summary: str) -> Dict[str, Any] | None:
+    response = (
+        supabase.table("articles")
+        .update({"title": title, "summary": summary, "embedding": None})
+        .eq("id", article_id)
+        .execute()
+    )
+    return response.data[0] if response.data else None
+
+
 def get_top_scored_articles() -> List[Dict[str, Any]]:
     """
     Supabaseの `articles` テーブルから、ai_score の高い順に上位20件の記事を取得する。
@@ -142,3 +163,34 @@ def update_article_user_state(
         .execute()
     )
     return response.data[0] if response.data else None
+
+
+def get_articles_for_embedding(rebuild: bool = False) -> List[Dict[str, Any]]:
+    """Get articles needing embeddings, or all articles when rebuilding."""
+    query = (
+        supabase.table("articles")
+        .select("id, title, summary, url, embedding")
+        .order("id")
+    )
+    if not rebuild:
+        query = query.is_("embedding", "null")
+    response = query.execute()
+    return response.data or []
+
+
+def save_article_embedding(article_id: int, embedding: List[float]) -> None:
+    supabase.table("articles").update({"embedding": embedding}).eq("id", article_id).execute()
+
+
+def search_similar_articles(
+    embedding: List[float], limit: int = 10, threshold: float = 0.0
+) -> List[Dict[str, Any]]:
+    response = supabase.rpc(
+        "match_articles",
+        {
+            "query_embedding": embedding,
+            "match_threshold": threshold,
+            "match_count": limit,
+        },
+    ).execute()
+    return response.data or []
