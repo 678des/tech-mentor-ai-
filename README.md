@@ -6,87 +6,65 @@
 
 ---
 
+## 💡 開発背景と解決したい課題
+
+### 開発背景
+
+AI時代、何をするべきなのか判断がつかず、進む方向がわからず、目標設定もこのままでいいのかなど、様々な不安が作業を遮っていました。何かとにかく情報が必要だと、強い問題意識を感じていました。
+
+また、一般的なAIチャット（GeminiやChatGPT等）を利用し、何を学ぶべきか判断していましたが、いつどこの情報なのか、だれが言ったものなのかと判断材料が足らず、比較対象もなく、なかなか情報収集が難しいという課題がありました。
+
+### 解決策
+
+「ユーザー情報を入力（大学の科目、将来の目標、現在やっている制作等）＆　RSS等で情報を取得 ➔ AIにニュースに対する関連度をスコア化➔目標とどう関係するのか簡単に要約→自分と関連度のありそうな情報が並ぶ」という一般的なRSSを少しバージョンアップさせた情報収集webアプリを構築しました。
+
+## 主な機能
+
+- 保存、保留機能：重要で見返す価値のある情報は保存し、まだわからない場合は保留にしておき、ＡＩに詳しく判断してもらうよう情報を整理します
+- ユーザー情報入力：目標ロードマップや今することを入力し、ＡＩの判断材料と、振り返りに使用します
+- 一言メモ: 一つの記事に対して、自分が思ったことやメモを軽くメモしておく機能
+- ＡＩによるスコアリング:ユーザー情報に応じて、とるべき情報をスコア化
+
 ## 🏗️ アーキテクチャ・プロジェクト構成
 
-本プロジェクトは、**Pythonバックエンド**と**React (Vite/TypeScript) フロントエンド**の分離構成で構築されています。
-
-```text
-student-it-news-ai/
- ┣ 📂 backend/        # Python (RSS収集、Qiita API連携、Gemini AI解析)
- ┃   ┣ 📜 main.py
- ┃   ┣ 📜 requirements.txt
- ┃   └ 📜 .env
- ┣ 📂 frontend/       # React + TypeScript + Vite (UI・ダッシュボード)
- ┃   ┣ 📜 package.json
- ┃   ┣ 📜 vite.config.ts
- ┃   └ 📜 .env
- ┣ 📜 .gitignore
- ┗ 📜 README.md
-```
-
----
+GitHub Actions(毎日) → バックエンド(FastAPI)がRSSを取得 → Geminiでスコアリング・要約 → Supabaseに保存 → フロント(React)が表示
 
 ## 🛠️ 技術スタック
 
-### Backend (Python)
+| 領域         | 技術                | 選んだ理由                                                                     |
+| ------------ | ------------------- | ------------------------------------------------------------------------------ | --- |
+| フロント     | React + Vite        | 開発サーバーが速いため                                                         |
+| バックエンド | Python / FastAPI    | feedparserなどRSS処理のライブラリが豊富で、非同期APIが書きやすい               |
+| DB・認証     | Supabase            | 認証やAPI設定などの負荷が少ない、容量が大きい→プロトタイプとしてすぐ試せるため |
+| AI           | Gemini API          | 無料枠が大きく、制限の心配が少ないため                                         |
+| ホスティング | Cloudflare / Render | 無料枠があり、基本的なバックエンドの処理に対応しているため。                   | 　  |
+| 定期実行     | GitHub Actions      | 毎日の記事取得を自動化するため                                                 |
 
-- **Python / feedparser**: RSSフィードの取得とパース
-- **Qiita API (v2)**: 記事IDからの安全な本文（Markdown）取得
-- **Google Gemini API**: 記事の分析・モチベーションに寄り添うメンター的要約の生成
-- **python-dotenv**: 環境変数のセキュアな管理
+## 🚀 起動方法(ローカル環境)
 
-### Frontend (React)
+### 前提
 
-- **React + TypeScript + Vite**: 高速で快適なSPA（シングルページアプリケーション）開発環境
-- **Lucide React (推奨)**: シンプルで美しいUIアイコン
-- **Tailwind CSS (推奨)**: スタイリング
+- Python 3.14 / Node.js
+- Supabaseのプロジェクト、Gemini APIキー
 
----
+### 1. 環境変数
 
-## 🚀 起動方法（ローカル環境）
+`.env.example` を `.env` にコピーし、以下を設定
 
-### 1. バックエンド（Python）の起動
+- `SUPABASE_URL` / `SUPABASE_KEY`
+- `GEMINI_API_KEY`
 
-```bash
-# backend フォルダに移動
+### 2. バックエンド
+
 cd backend
-
-# 仮想環境の作成と有効化
-python -m venv venv
-
-# Windowsの場合:
-.\venv\Scripts\activate
-# macOS/Linuxの場合:
-# source venv/bin/activate
-
-# 依存ライブラリのインストール
 pip install -r requirements.txt
-pip install python-dotenv
+uvicorn app:app --reload
 
-# .env ファイルを作成し、GEMINI_API_KEYを設定する
-# 例: GEMINI_API_KEY="your-api-key"
+### 3. フロントエンド(別ターミナル)
 
-# スクリプトの実行
-python main.py
-```
-
-### 2. フロントエンド（React / Vite）の起動
-
-```bash
-# 別ターミナルを開き、frontend フォルダに移動
 cd frontend
-
-# 依存パッケージのインストール
 npm install
-
-# 開発サーバーの起動
 npm run dev
-```
-
----
+→ http://localhost:5173 を開く
 
 ## 💡 今後の開発目標
-
-- [ ] 記事一覧と要約詳細モーダルのUI実装
-- [ ] バックエンド（Python）とフロントエンド（React）のAPI連携
-- [ ] お気に入り・保存済み記事のタブ切り替え機能
