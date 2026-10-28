@@ -76,6 +76,82 @@ def get_article_by_id(article_id: int) -> Dict[str, Any] | None:
     return response.data
 
 
+def save_article_url_as_important(url: str, title: str) -> Dict[str, Any]:
+    """Save a pasted URL as important, promoting an existing article if needed."""
+    article_fields = "id, title, url, summary, ai_score, ai_comment, save_type, user_note, created_at"
+    lookup = (
+        supabase.table("articles")
+        .select(article_fields)
+        .eq("url", url)
+        .limit(1)
+        .execute()
+    )
+    existing_rows = getattr(lookup, "data", None) or []
+    existing = existing_rows[0] if existing_rows else None
+
+    if existing:
+        (
+            supabase.table("articles")
+            .update({"save_type": "important"})
+            .eq("id", existing["id"])
+            .execute()
+        )
+        refreshed = (
+            supabase.table("articles")
+            .select(article_fields)
+            .eq("id", existing["id"])
+            .limit(1)
+            .execute()
+        )
+        rows = getattr(refreshed, "data", None) or []
+        return rows[0] if rows else {**existing, "save_type": "important"}
+
+    (
+        supabase.table("articles")
+        .insert({
+            "title": title,
+            "url": url,
+            "summary": "",
+            "save_type": "important",
+        })
+        .execute()
+    )
+    saved = (
+        supabase.table("articles")
+        .select(article_fields)
+        .eq("url", url)
+        .limit(1)
+        .execute()
+    )
+    saved_rows = getattr(saved, "data", None) or []
+    if not saved_rows:
+        raise RuntimeError("記事を保存できませんでした")
+    return saved_rows[0]
+
+
+def update_article_title(article_id: int, title: str) -> Dict[str, Any] | None:
+    """Update an article title and invalidate its embedding for later rebuilding."""
+    (
+        supabase.table("articles")
+        .update({"title": title, "embedding": None})
+        .eq("id", article_id)
+        .execute()
+    )
+    response = (
+        supabase.table("articles")
+        .select("id, title, url, summary, ai_score, ai_comment, save_type, user_note, created_at")
+        .eq("id", article_id)
+        .limit(1)
+        .execute()
+    )
+    rows = getattr(response, "data", None) or []
+    if not rows:
+        return None
+    article = rows[0]
+    article.pop("embedding", None)
+    return article
+
+
 def update_article_summary(article_id: int, title: str, summary: str) -> Dict[str, Any] | None:
     response = (
         supabase.table("articles")

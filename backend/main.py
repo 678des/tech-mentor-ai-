@@ -1,10 +1,25 @@
 import os
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv  
 load_dotenv()
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+
+app = FastAPI()
+frontend_url_env = os.getenv("FRONTEND_URL", "http://localhost:5173")
+allowed_origins = [url.strip() for url in frontend_url_env.split(",")]
+# React(Vite)からのリクエストを許可するCORS設定
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_origins,  # Viteのデフォルトポート
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
 from ai import (
     build_article_embedding_text,
     create_embedding,
@@ -15,7 +30,7 @@ from crud import *
 from pydantic import BaseModel, Field
 from typing import List, Literal
 from rss import get_news, refresh_article_summary
-from qiita import search_qiita_articles
+from qiita import get_qiita_article_by_url, search_qiita_articles
 
 
     
@@ -71,18 +86,15 @@ class ArticleVectorSearchRequest(BaseModel):
     limit: int = Field(default=10, ge=1, le=50)
     threshold: float = Field(default=0.0, ge=0.0, le=1.0)
 
+
+class SaveArticleUrlRequest(BaseModel):
+    url: str = Field(min_length=1, max_length=2048)
+
+
+class ArticleTitleUpdate(BaseModel):
+    title: str = Field(min_length=1, max_length=2048)
+
     
-app = FastAPI()
-frontend_url_env = os.getenv("FRONTEND_URL", "http://localhost:5173")
-allowed_origins = [url.strip() for url in frontend_url_env.split(",")]
-# React(Vite)からのリクエストを許可するCORS設定
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=allowed_origins,  # Viteのデフォルトポート
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 
 @app.get("/api/news")
@@ -153,6 +165,48 @@ def get_important_articles_endpoint():
             status_code=500,
             detail=f"重要記事の取得に失敗しました: {e}",
         )
+
+@app.post("/api/articles/save-url")
+def save_article_url_endpoint(body: SaveArticleUrlRequest):
+    """Save a user-provided HTTPS URL to the important articles list."""
+    url = body.url.strip()
+    parsed = urlparse(url)
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.hostname
+        or parsed.username
+        or parsed.password
+    ):
+        raise HTTPException(status_code=422, detail="有効な http または https の記事URLを入力してください")
+
+    title = url
+    if parsed.hostname.lower() in {"qiita.com", "www.qiita.com"}:
+        try:
+            title = get_qiita_article_by_url(url)["title"] or url
+        except Exception:
+            # Saving the URL should still work if the official metadata API is unavailable.
+            title = url
+    try:
+        article = save_article_url_as_important(url, title)
+        return {"article": article}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"記事URLの保存に失敗しました: {e}")
+
+
+@app.patch("/api/articles/{article_id}/title")
+def update_article_title_endpoint(article_id: int, body: ArticleTitleUpdate):
+    title = body.title.strip()
+    if not title:
+        raise HTTPException(status_code=422, detail="タイトルを入力してください")
+    try:
+        article = update_article_title(article_id, title)
+        if article is None:
+            raise HTTPException(status_code=404, detail="記事が見つかりません")
+        return article
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"タイトルの更新に失敗しました: {e}")
 
 
 @app.post("/api/articles/{article_id}/refresh-summary")

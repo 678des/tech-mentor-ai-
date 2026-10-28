@@ -87,6 +87,24 @@ function App() {
         {activeTab === "tab3" && (
           <ArticleList
             articlesData={importantArticlesData ?? []}
+            showSaveByUrl
+            editableTitle
+            onArticleAdded={(savedArticle) => {
+              setImportantArticlesData((current) => {
+                const articles = current ?? [];
+                return [
+                  savedArticle,
+                  ...articles.filter((article) => article.id !== savedArticle.id),
+                ];
+              });
+              setArticleData((current) => {
+                if (!current) return current;
+                return [
+                  savedArticle,
+                  ...current.filter((article) => article.id !== savedArticle.id),
+                ];
+              });
+            }}
             onArticleUpdated={(updatedArticle) => {
               setImportantArticlesData(
                 (current) =>

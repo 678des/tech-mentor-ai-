@@ -1,5 +1,5 @@
 import type { ResponseArticle } from "../App";
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 
 const API_URL = (
   import.meta.env.VITE_API_URL || "http://localhost:8000"
@@ -8,12 +8,74 @@ const API_URL = (
 export function ArticleList({
   articlesData,
   onArticleUpdated,
+  onArticleAdded,
+  showSaveByUrl = false,
+  editableTitle = false,
 }: {
   articlesData: ResponseArticle[];
   onArticleUpdated: (article: ResponseArticle) => void;
+  onArticleAdded?: (article: ResponseArticle) => void;
+  showSaveByUrl?: boolean;
+  editableTitle?: boolean;
 }) {
   const [savingIds, setSavingIds] = useState<number[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [articleUrl, setArticleUrl] = useState("");
+  const [isSavingUrl, setIsSavingUrl] = useState(false);
+  const [saveUrlMessage, setSaveUrlMessage] = useState<string | null>(null);
+  const [editingTitleId, setEditingTitleId] = useState<number | null>(null);
+  const [titleDraft, setTitleDraft] = useState("");
+  const [savingTitleId, setSavingTitleId] = useState<number | null>(null);
+
+  const saveArticleTitle = async (article: ResponseArticle) => {
+    const title = titleDraft.trim();
+    if (!title) {
+      setError("タイトルを入力してください。");
+      return;
+    }
+    setSavingTitleId(article.id);
+    setError(null);
+    try {
+      const response = await fetch(`${API_URL}/api/articles/${article.id}/title`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "タイトルを更新できませんでした。");
+      onArticleUpdated(data);
+      setEditingTitleId(null);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "タイトルを更新できませんでした。");
+    } finally {
+      setSavingTitleId(null);
+    }
+  };
+
+  const saveArticleUrl = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError(null);
+    setSaveUrlMessage(null);
+    setIsSavingUrl(true);
+    try {
+      const response = await fetch(`${API_URL}/api/articles/save-url`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: articleUrl.trim() }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.detail || "記事を保存できませんでした。");
+      }
+      onArticleAdded?.(data.article);
+      setArticleUrl("");
+      setSaveUrlMessage("重要記事に保存しました。");
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "記事を保存できませんでした。");
+    } finally {
+      setIsSavingUrl(false);
+    }
+  };
 
   const saveArticleState = async (
     article: ResponseArticle,
@@ -45,6 +107,34 @@ export function ArticleList({
 
   return (
     <main className="flex-1 p-4 bg-white">
+      {showSaveByUrl && (
+        <section className="mb-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <h2 className="text-lg font-semibold">URLから重要記事を保存</h2>
+          <p className="mt-1 text-sm text-slate-600">
+            アプリ外で見つけた記事のURLを貼り付けて保存できます。
+          </p>
+          <form onSubmit={(event) => void saveArticleUrl(event)} className="mt-3 flex flex-col gap-2 sm:flex-row">
+            <input
+              type="url"
+              required
+              maxLength={2048}
+              value={articleUrl}
+              onChange={(event) => setArticleUrl(event.target.value)}
+              placeholder="https://example.com/article"
+              aria-label="保存する記事のURL"
+              className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+            />
+            <button
+              type="submit"
+              disabled={isSavingUrl}
+              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isSavingUrl ? "保存中…" : "重要記事に保存"}
+            </button>
+          </form>
+          {saveUrlMessage && <p role="status" className="mt-2 text-sm text-emerald-700">{saveUrlMessage}</p>}
+        </section>
+      )}
       <div>
         <span>全{articlesData?.length || 0} 件</span>
       </div>
@@ -63,9 +153,58 @@ export function ArticleList({
               className="border p-4 my-2 rounded space-y-3"
             >
               <div>
-                <a href={article.url}>
-                  <h3>{article.title}</h3>
-                </a>
+                {editingTitleId === article.id ? (
+                  <form
+                    className="flex flex-col gap-2 sm:flex-row"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      void saveArticleTitle(article);
+                    }}
+                  >
+                    <input
+                      autoFocus
+                      required
+                      maxLength={2048}
+                      value={titleDraft}
+                      onChange={(event) => setTitleDraft(event.target.value)}
+                      aria-label="記事タイトル"
+                      className="min-w-0 flex-1 rounded border border-slate-300 px-2 py-1"
+                    />
+                    <button
+                      type="submit"
+                      disabled={savingTitleId === article.id}
+                      className="rounded bg-blue-600 px-3 py-1 text-sm text-white disabled:opacity-60"
+                    >
+                      {savingTitleId === article.id ? "保存中…" : "保存"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingTitleId(null)}
+                      disabled={savingTitleId === article.id}
+                      className="rounded border border-slate-300 px-3 py-1 text-sm"
+                    >
+                      キャンセル
+                    </button>
+                  </form>
+                ) : (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <a href={article.url} target="_blank" rel="noreferrer">
+                      <h3 className="font-medium text-blue-700 hover:underline">{article.title}</h3>
+                    </a>
+                    {editableTitle && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTitleDraft(article.title);
+                          setEditingTitleId(article.id);
+                        }}
+                        className="text-xs text-slate-500 underline hover:text-slate-800"
+                      >
+                        タイトルを編集
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
               <p className="text-sm text-slate-600">{article.summary}</p>
               <div className="flex flex-wrap items-center gap-2">
