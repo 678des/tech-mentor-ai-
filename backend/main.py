@@ -3,13 +3,19 @@ import os
 from dotenv import load_dotenv  
 load_dotenv()
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from ai import evaluate_articles_with_gemini, generate_context_advice
+from ai import (
+    build_article_embedding_text,
+    create_embedding,
+    evaluate_articles_with_gemini,
+    generate_context_advice,
+)
 from crud import *
 from pydantic import BaseModel, Field
 from typing import List, Literal
-from rss import get_news
+from rss import get_news, refresh_article_summary
+from qiita import search_qiita_articles
 
 
     
@@ -53,6 +59,18 @@ class ContextAdviceResponse(BaseModel):
     after_reading_choices: List[str]
     reminder: str
 
+
+class ArticleVectorizeResponse(BaseModel):
+    processed: int
+    remaining: int
+    failed_ids: List[int]
+
+
+class ArticleVectorSearchRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=1000)
+    limit: int = Field(default=10, ge=1, le=50)
+    threshold: float = Field(default=0.0, ge=0.0, le=1.0)
+
     
 app = FastAPI()
 frontend_url_env = os.getenv("FRONTEND_URL", "http://localhost:5173")
@@ -70,6 +88,23 @@ app.add_middleware(
 @app.get("/api/news")
 def get_news_endpoint():
     return get_news()
+
+
+@app.get("/api/qiita/search")
+def search_qiita_endpoint(
+    q: str = Query(min_length=1, max_length=200),
+    page: int = Query(default=1, ge=1, le=100),
+    per_page: int = Query(default=20, ge=1, le=100),
+):
+    normalized_query = q.strip()
+    if not normalized_query:
+        raise HTTPException(status_code=422, detail="検索キーワードを入力してください")
+    try:
+        return search_qiita_articles(normalized_query, page, per_page)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Qiita記事の検索に失敗しました: {e}")
 
 
 @app.get("/api/user-context")
@@ -118,6 +153,81 @@ def get_important_articles_endpoint():
             status_code=500,
             detail=f"重要記事の取得に失敗しました: {e}",
         )
+
+
+@app.post("/api/articles/{article_id}/refresh-summary")
+def refresh_article_summary_endpoint(article_id: int):
+    """Re-fetch one article's summary from the configured RSS feeds."""
+    try:
+        article = get_article_by_id(article_id)
+        if article is None:
+            raise HTTPException(status_code=404, detail="記事が見つかりません")
+
+        refreshed = refresh_article_summary(article)
+        updated = update_article_summary(
+            article_id,
+            refreshed["title"],
+            refreshed["summary"],
+        )
+        if updated is None:
+            raise HTTPException(status_code=404, detail="記事の更新に失敗しました")
+        return {"message": "記事概要を更新しました。ベクトルは再生成が必要です。", "article": updated}
+    except HTTPException:
+        raise
+    except LookupError as e:
+        raise HTTPException(status_code=501, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"RSS概要の再取得に失敗しました: {e}")
+
+
+@app.post("/api/articles/vectorize-existing", response_model=ArticleVectorizeResponse)
+def vectorize_existing_articles_endpoint(
+    batch_size: int = Query(default=50, ge=1, le=100),
+    rebuild: bool = Query(default=True),
+):
+    """Embed saved title + RSS summary; rebuild=true refreshes existing vectors."""
+    try:
+        pending = get_articles_for_embedding(rebuild=rebuild)
+        if rebuild:
+            pending = [article for article in pending if article.get("embedding") is not None]
+        else:
+            pending = [article for article in pending if article.get("embedding") is None]
+        batch = pending[:batch_size]
+        failed_ids: List[int] = []
+        processed = 0
+        for article in batch:
+            try:
+                text = build_article_embedding_text(article)
+                if not text.strip():
+                    failed_ids.append(article["id"])
+                    continue
+                embedding = create_embedding(text)
+                save_article_embedding(article["id"], embedding)
+                processed += 1
+            except Exception as e:
+                print(f"記事ID {article['id']} の埋め込みに失敗: {e}")
+                failed_ids.append(article["id"])
+        return {
+            "processed": processed,
+            "remaining": max(0, len(pending) - processed - len(failed_ids)),
+            "failed_ids": failed_ids,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"記事のベクトル化に失敗しました: {e}")
+
+
+@app.post("/api/articles/vector-search")
+def search_articles_by_vector_endpoint(body: ArticleVectorSearchRequest):
+    """Return similar existing articles so retrieval can be inspected directly."""
+    query = body.query.strip()
+    if not query:
+        raise HTTPException(status_code=422, detail="検索文を入力してください")
+    try:
+        embedding = create_embedding(f"検索クエリ: {query}")
+        articles = search_similar_articles(embedding, body.limit, body.threshold)
+        return {"query": query, "count": len(articles), "articles": articles}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"ベクトル検索に失敗しました: {e}")
 
 
 @app.patch("/api/articles/{article_id}/user-state")

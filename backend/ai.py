@@ -13,6 +13,33 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 client = genai.Client(api_key=GEMINI_API_KEY)
 
+EMBEDDING_MODEL = os.environ.get("GEMINI_EMBEDDING_MODEL", "gemini-embedding-2")
+EMBEDDING_DIMENSIONS = 1536
+
+
+def build_article_embedding_text(article: Dict[str, Any]) -> str:
+    """Build the text representation used for article retrieval."""
+    parts = [
+        f"タイトル: {(article.get('title') or '').strip()}",
+        f"RSS概要: {(article.get('summary') or '').strip()}",
+    ]
+    return "\n".join(part for part in parts if part.split(": ", 1)[1])
+
+
+def create_embedding(text: str) -> List[float]:
+    """Create a 1536-dimensional embedding compatible with articles.embedding."""
+    response = client.models.embed_content(
+        model=EMBEDDING_MODEL,
+        contents=text,
+        config=types.EmbedContentConfig(output_dimensionality=EMBEDDING_DIMENSIONS),
+    )
+    if not response.embeddings or not response.embeddings[0].values:
+        raise ValueError("Geminiから埋め込みベクトルが返されませんでした")
+    values = response.embeddings[0].values
+    if len(values) != EMBEDDING_DIMENSIONS:
+        raise ValueError(f"埋め込み次元数が不正です: {len(values)}")
+    return values
+
 
 def generate_context_advice(user_context: Dict[str, Any]) -> Dict[str, Any]:
     """ユーザーコンテクストから、情報との向き合い方を提案する。"""
