@@ -162,16 +162,25 @@ def update_article_summary(article_id: int, title: str, summary: str) -> Dict[st
     return response.data[0] if response.data else None
 
 
-def get_top_scored_articles() -> List[Dict[str, Any]]:
+def get_top_scored_articles(limit: int = 100, unhandled_only: bool = True) -> List[Dict[str, Any]]:
     """
-    Supabaseの `articles` テーブルから、ai_score の高い順に上位20件の記事を取得する。
-    ai_scoreが設定されていない記事を除外したい場合は .not_.is_("ai_score", "null") を挟む。
+    Supabaseの `articles` テーブルから、未処理（save_type is null）の記事を対象に、
+    ai_score の高い順、次に新しい順（created_at desc）で最大100件取得する。
     """
     try:
-        response = supabase.table("articles").select("*").order("ai_score", desc=True).limit(20).execute()
-        return response.data
+        query = supabase.table("articles").select("*")
+        if unhandled_only:
+            query = query.is_("save_type", "null")
+        response = (
+            query
+            .order("ai_score", desc=True, nullsfirst=False)
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        return response.data or []
     except Exception as e:
-        print(f"記事全件取得時にエラーが発生しました: {e}")
+        print(f"記事取得時にエラーが発生しました: {e}")
         return []
 
 

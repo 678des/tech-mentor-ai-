@@ -74,11 +74,13 @@ function App() {
               onArticleUpdated={(updatedArticle) => {
                 setArticleData(
                   (current) =>
-                    current?.map((article) =>
-                      article.id === updatedArticle.id
-                        ? updatedArticle
-                        : article,
-                    ) ?? null,
+                    current
+                      ?.map((article) =>
+                        article.id === updatedArticle.id
+                          ? updatedArticle
+                          : article,
+                      )
+                      .filter((article) => !article.save_type) ?? null,
                 );
               }}
             />

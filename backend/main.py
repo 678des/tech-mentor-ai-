@@ -204,11 +204,15 @@ def get_user_context_advice_endpoint():
 
 
 @app.get("/api/articles")
-def get_articles_endpoint():
+def get_articles_endpoint(
+    limit: int = Query(default=100, ge=1, le=200),
+    unhandled_only: bool = Query(default=True),
+):
     """
-    Supabaseに保存されているすべての記事をJSON形式でフロントエンドに返す
+    未処理（save_typeが未設定）の記事を対象に、
+    AIスコアが高い順、次に新しい順（created_at降順）で最大100件をフロントエンドに返す
     """
-    articles = get_top_scored_articles()
+    articles = get_top_scored_articles(limit=limit, unhandled_only=unhandled_only)
     return {
         "count": len(articles),
         "articles": articles
