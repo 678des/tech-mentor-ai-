@@ -102,6 +102,65 @@ def get_news_endpoint():
     return get_news()
 
 
+@app.post("/api/fetch-rss")
+def fetch_rss_endpoint():
+    """
+    フロントのボタンからRSSを即時取得してSupabaseに保存するデバッグ・プロトタイプ用エンドポイント
+    """
+    try:
+        articles = get_news()
+        return {
+            "status": "success",
+            "message": f"{len(articles)}件の新着記事を取得・保存しました！",
+            "count": len(articles),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"RSS取得に失敗しました: {e}")
+
+
+@app.post("/api/run-pipeline")
+def run_pipeline_endpoint():
+    """
+    GitHub Actionsと同じ処理（RSS取得 + 未処理記事のAI要約・スコアリング）を一括実行する
+    """
+    try:
+        # 1. 最新記事を取得
+        articles = get_news()
+
+        # 2. 未処理の記事を取得
+        unprocessed = get_unprocessed_articles()
+        if not unprocessed:
+            return {
+                "status": "success",
+                "message": f"RSS取得完了（{len(articles)}件新着）。評価対象の未処理記事はありませんでした。",
+                "rss_count": len(articles),
+                "ai_count": 0,
+            }
+
+        # 3. Geminiで評価
+        user_context = get_user_context()
+        evaluated = evaluate_articles_with_gemini(unprocessed, user_context)
+        if not evaluated:
+            return {
+                "status": "warning",
+                "message": f"RSS取得完了（{len(articles)}件）。Geminiからの評価取得ができませんでした。",
+                "rss_count": len(articles),
+                "ai_count": 0,
+            }
+
+        # 4. Supabaseを更新
+        update_articles_in_supabase(evaluated)
+
+        return {
+            "status": "success",
+            "message": f"RSS取得（{len(articles)}件）と {len(evaluated)}件のAI要約・スコアリングが完了しました！",
+            "rss_count": len(articles),
+            "ai_count": len(evaluated),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"パイプライン実行に失敗しました: {e}")
+
+
 @app.get("/api/qiita/search")
 def search_qiita_endpoint(
     q: str = Query(min_length=1, max_length=200),

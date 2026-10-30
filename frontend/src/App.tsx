@@ -69,6 +69,8 @@ function App() {
           activeTab === "tab1" && (
             <ArticleList
               articlesData={articlesData ?? []}
+              showRssFetchControls
+              onRefreshArticles={fetchArticles}
               onArticleUpdated={(updatedArticle) => {
                 setArticleData(
                   (current) =>
