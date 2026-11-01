@@ -1,4 +1,5 @@
 import os
+from typing import List, Dict, Any, Literal
 from urllib.parse import urlparse
 
 from dotenv import load_dotenv  
@@ -6,73 +7,55 @@ load_dotenv()
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
 
-app = FastAPI()
+from ai import (
+    build_article_embedding_text,
+    create_embedding,
+    generate_rag_answer,
+)
+from crud import (
+    get_articles,
+    get_top_scored_articles,
+    get_important_articles,
+    get_article_by_id,
+    save_article_url_as_important,
+    update_article_title,
+    update_article_user_state,
+    get_articles_for_embedding,
+    save_article_embedding,
+    search_similar_articles,
+    vectorize_unembedded_articles,
+)
+from rss import get_news
+from qiita import get_qiita_article_by_url, search_qiita_articles
+
+app = FastAPI(title="IT News & RAG Research API")
+
 frontend_url_env = os.getenv("FRONTEND_URL", "http://localhost:5173")
-allowed_origins = [url.strip() for url in frontend_url_env.split(",")]
-# React(Vite)からのリクエストを許可するCORS設定
+allowed_origins = [url.strip() for url in frontend_url_env.split(",") if url.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,  # Viteのデフォルトポート
+    allow_origins=allowed_origins if allowed_origins else ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
-from ai import (
-    build_article_embedding_text,
-    create_embedding,
-    evaluate_articles_with_gemini,
-    generate_context_advice,
-)
-from crud import *
-from pydantic import BaseModel, Field
-from typing import List, Literal
-from rss import get_news, refresh_article_summary
-from qiita import get_qiita_article_by_url, search_qiita_articles
-
-
-    
-
-# 1. 構造の定義（TypeScriptの型定義と一対一になる）
-class SelectedArticle(BaseModel):
-    title: str
-    url: str
-    reason: str  # なぜ今読むべきなのか（選定理由）
-
-class NewsResponse(BaseModel):
-    mentor_message: str            # 最後のメンターメッセージ
-    selected_articles: List[SelectedArticle]  # AIが選んだ3〜5件
-    all_candidates_count: int      # 取得した全記事数などのメタ情報
-
+# --- リクエスト/レスポンスモデル ---
 
 class ArticleUserStateUpdate(BaseModel):
-    save_type: Literal["later", "important","done"] | None = None
+    save_type: Literal["later", "important", "done"] | None = None
     user_note: str | None = None
 
 
-class UserContextUpdate(BaseModel):
-    career_goal: str = ""
-    current_focus: str = ""
-    subjects: List[str] = Field(default_factory=list)
-    interests: List[str] = Field(default_factory=list)
-    current_situation: str = ""
-    projects: List[str] = Field(default_factory=list)
+class SaveArticleUrlRequest(BaseModel):
+    url: str = Field(min_length=1, max_length=2048)
 
 
-class ContextAdviceTheme(BaseModel):
-    theme: str
-    why: str
-    article_angles: List[str]
-    search_queries: List[str]
-
-
-class ContextAdviceResponse(BaseModel):
-    overview: str
-    themes: List[ContextAdviceTheme]
-    after_reading_choices: List[str]
-    reminder: str
+class ArticleTitleUpdate(BaseModel):
+    title: str = Field(min_length=1, max_length=2048)
 
 
 class ArticleVectorizeResponse(BaseModel):
@@ -87,31 +70,35 @@ class ArticleVectorSearchRequest(BaseModel):
     threshold: float = Field(default=0.0, ge=0.0, le=1.0)
 
 
-class SaveArticleUrlRequest(BaseModel):
-    url: str = Field(min_length=1, max_length=2048)
+class RagQueryRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=1000)
+    limit: int = Field(default=8, ge=1, le=30)
+    threshold: float = Field(default=0.0, ge=0.0, le=1.0)
 
 
-class ArticleTitleUpdate(BaseModel):
-    title: str = Field(min_length=1, max_length=2048)
+class RagQueryResponse(BaseModel):
+    query: str
+    answer: str
+    key_insights: List[str]
+    referenced_articles: List[Dict[str, Any]]
 
-    
 
+# --- エンドポイント ---
 
 @app.get("/api/news")
 def get_news_endpoint():
-    return get_news()
+    """RSS記事を取得し、未ベクトル化記事を自動インデックス化する"""
+    return get_news(auto_vectorize=True)
 
 
 @app.post("/api/fetch-rss")
 def fetch_rss_endpoint():
-    """
-    フロントのボタンからRSSを即時取得してSupabaseに保存するデバッグ・プロトタイプ用エンドポイント
-    """
+    """手動でRSS記事を取得し、自動ベクトル化を実行するエンドポイント"""
     try:
-        articles = get_news()
+        articles = get_news(auto_vectorize=True)
         return {
             "status": "success",
-            "message": f"{len(articles)}件の新着記事を取得・保存しました！",
+            "message": f"{len(articles)}件の新着記事を取得し、自動ベクトル化を行いました！",
             "count": len(articles),
         }
     except Exception as e:
@@ -121,86 +108,19 @@ def fetch_rss_endpoint():
 @app.post("/api/run-pipeline")
 def run_pipeline_endpoint():
     """
-    GitHub Actionsと同じ処理（RSS取得 + 未処理記事のAI要約・スコアリング）を一括実行する
+    RAGパイプライン（RSS新着取得 + 自動ベクトル化）を実行する
     """
     try:
-        # 1. 最新記事を取得
-        articles = get_news()
-
-        # 2. 未処理の記事を取得
-        unprocessed = get_unprocessed_articles()
-        if not unprocessed:
-            return {
-                "status": "success",
-                "message": f"RSS取得完了（{len(articles)}件新着）。評価対象の未処理記事はありませんでした。",
-                "rss_count": len(articles),
-                "ai_count": 0,
-            }
-
-        # 3. Geminiで評価
-        user_context = get_user_context()
-        evaluated = evaluate_articles_with_gemini(unprocessed, user_context)
-        if not evaluated:
-            return {
-                "status": "warning",
-                "message": f"RSS取得完了（{len(articles)}件）。Geminiからの評価取得ができませんでした。",
-                "rss_count": len(articles),
-                "ai_count": 0,
-            }
-
-        # 4. Supabaseを更新
-        update_articles_in_supabase(evaluated)
-
+        articles = get_news(auto_vectorize=False)
+        vec_result = vectorize_unembedded_articles(batch_size=100)
         return {
             "status": "success",
-            "message": f"RSS取得（{len(articles)}件）と {len(evaluated)}件のAI要約・スコアリングが完了しました！",
+            "message": f"RSS取得（{len(articles)}件）と未インデックス記事のベクトル化（{vec_result['processed']}件）が完了しました！",
             "rss_count": len(articles),
-            "ai_count": len(evaluated),
+            "vectorized_count": vec_result["processed"],
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"パイプライン実行に失敗しました: {e}")
-
-
-@app.get("/api/qiita/search")
-def search_qiita_endpoint(
-    q: str = Query(min_length=1, max_length=200),
-    page: int = Query(default=1, ge=1, le=100),
-    per_page: int = Query(default=20, ge=1, le=100),
-):
-    normalized_query = q.strip()
-    if not normalized_query:
-        raise HTTPException(status_code=422, detail="検索キーワードを入力してください")
-    try:
-        return search_qiita_articles(normalized_query, page, per_page)
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Qiita記事の検索に失敗しました: {e}")
-
-
-@app.get("/api/user-context")
-def get_user_context_endpoint():
-    try:
-        return get_user_context()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"ユーザー情報の取得に失敗しました: {e}")
-
-
-@app.put("/api/user-context")
-def save_user_context_endpoint(body: UserContextUpdate):
-    try:
-        return save_user_context(body.model_dump())
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"ユーザー情報の保存に失敗しました: {e}")
-
-
-@app.post("/api/user-context/advice", response_model=ContextAdviceResponse)
-def get_user_context_advice_endpoint():
-    try:
-        user_context = get_user_context()
-        return generate_context_advice(user_context)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"情報の見方の提案に失敗しました: {e}")
 
 
 @app.get("/api/articles")
@@ -209,14 +129,14 @@ def get_articles_endpoint(
     unhandled_only: bool = Query(default=True),
 ):
     """
-    未処理（save_typeが未設定）の記事を対象に、
-    AIスコアが高い順、次に新しい順（created_at降順）で最大100件をフロントエンドに返す
+    未処理（save_typeが未設定）の記事を最新順で最大100件返す
     """
-    articles = get_top_scored_articles(limit=limit, unhandled_only=unhandled_only)
+    articles = get_articles(limit=limit, unhandled_only=unhandled_only)
     return {
         "count": len(articles),
         "articles": articles
     }
+
 
 @app.get("/api/articles/important")
 def get_important_articles_endpoint():
@@ -224,14 +144,12 @@ def get_important_articles_endpoint():
         articles = get_important_articles()
         return {"count": len(articles), "articles": articles}
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"重要記事の取得に失敗しました: {e}",
-        )
+        raise HTTPException(status_code=500, detail=f"重要記事の取得に失敗しました: {e}")
+
 
 @app.post("/api/articles/save-url")
 def save_article_url_endpoint(body: SaveArticleUrlRequest):
-    """Save a user-provided HTTPS URL to the important articles list."""
+    """ユーザーが入力したURLを保存記事に追加する"""
     url = body.url.strip()
     parsed = urlparse(url)
     if (
@@ -247,10 +165,16 @@ def save_article_url_endpoint(body: SaveArticleUrlRequest):
         try:
             title = get_qiita_article_by_url(url)["title"] or url
         except Exception:
-            # Saving the URL should still work if the official metadata API is unavailable.
             title = url
     try:
         article = save_article_url_as_important(url, title)
+        # 保存時に自動でベクトル化を試行
+        try:
+            embed_text = build_article_embedding_text(article)
+            if embed_text.strip():
+                save_article_embedding(article["id"], create_embedding(embed_text))
+        except Exception as embed_err:
+            print(f"個別URL保存時のベクトル化エラー（続行）: {embed_err}")
         return {"article": article}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"記事URLの保存に失敗しました: {e}")
@@ -272,84 +196,9 @@ def update_article_title_endpoint(article_id: int, body: ArticleTitleUpdate):
         raise HTTPException(status_code=500, detail=f"タイトルの更新に失敗しました: {e}")
 
 
-@app.post("/api/articles/{article_id}/refresh-summary")
-def refresh_article_summary_endpoint(article_id: int):
-    """Re-fetch one article's summary from the configured RSS feeds."""
-    try:
-        article = get_article_by_id(article_id)
-        if article is None:
-            raise HTTPException(status_code=404, detail="記事が見つかりません")
-
-        refreshed = refresh_article_summary(article)
-        updated = update_article_summary(
-            article_id,
-            refreshed["title"],
-            refreshed["summary"],
-        )
-        if updated is None:
-            raise HTTPException(status_code=404, detail="記事の更新に失敗しました")
-        return {"message": "記事概要を更新しました。ベクトルは再生成が必要です。", "article": updated}
-    except HTTPException:
-        raise
-    except LookupError as e:
-        raise HTTPException(status_code=501, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"RSS概要の再取得に失敗しました: {e}")
-
-
-@app.post("/api/articles/vectorize-existing", response_model=ArticleVectorizeResponse)
-def vectorize_existing_articles_endpoint(
-    batch_size: int = Query(default=50, ge=1, le=100),
-    rebuild: bool = Query(default=True),
-):
-    """Embed saved title + RSS summary; rebuild=true refreshes existing vectors."""
-    try:
-        pending = get_articles_for_embedding(rebuild=rebuild)
-        if rebuild:
-            pending = [article for article in pending if article.get("embedding") is not None]
-        else:
-            pending = [article for article in pending if article.get("embedding") is None]
-        batch = pending[:batch_size]
-        failed_ids: List[int] = []
-        processed = 0
-        for article in batch:
-            try:
-                text = build_article_embedding_text(article)
-                if not text.strip():
-                    failed_ids.append(article["id"])
-                    continue
-                embedding = create_embedding(text)
-                save_article_embedding(article["id"], embedding)
-                processed += 1
-            except Exception as e:
-                print(f"記事ID {article['id']} の埋め込みに失敗: {e}")
-                failed_ids.append(article["id"])
-        return {
-            "processed": processed,
-            "remaining": max(0, len(pending) - processed - len(failed_ids)),
-            "failed_ids": failed_ids,
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"記事のベクトル化に失敗しました: {e}")
-
-
-@app.post("/api/articles/vector-search")
-def search_articles_by_vector_endpoint(body: ArticleVectorSearchRequest):
-    """Return similar existing articles so retrieval can be inspected directly."""
-    query = body.query.strip()
-    if not query:
-        raise HTTPException(status_code=422, detail="検索文を入力してください")
-    try:
-        embedding = create_embedding(f"検索クエリ: {query}")
-        articles = search_similar_articles(embedding, body.limit, body.threshold)
-        return {"query": query, "count": len(articles), "articles": articles}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"ベクトル検索に失敗しました: {e}")
-
-
 @app.patch("/api/articles/{article_id}/user-state")
 def update_article_state_endpoint(article_id: int, body: ArticleUserStateUpdate):
-    """記事の保存タイプと自分用メモを保存する。save_type=nullで保存を解除する。"""
+    """記事の保存タイプと自分用メモを保存する。"""
     try:
         article = update_article_user_state(article_id, body.save_type, body.user_note)
         if article is None:
@@ -361,34 +210,90 @@ def update_article_state_endpoint(article_id: int, body: ArticleUserStateUpdate)
         raise HTTPException(status_code=500, detail=f"記事の保存に失敗しました: {e}")
 
 
-
-
-@app.post("/api/run-ai-pipeline")
-def trigger_ai_pipeline():
-    """
-    フロントのボタンから叩かれるエンドポイント
-    """
+@app.post("/api/articles/vectorize-existing", response_model=ArticleVectorizeResponse)
+def vectorize_existing_articles_endpoint(
+    batch_size: int = Query(default=50, ge=1, le=100),
+    rebuild: bool = Query(default=False),
+):
+    """未ベクトル化記事のEmbedding生成（rebuild=trueで全件再生成）"""
     try:
-        print("--- リクエスト検知：AI要約パイプライン実行開始 ---")
-        
-        # 1. 未処理の記事を取得
-        unprocessed = get_unprocessed_articles()
-        if not unprocessed:
-            return {"status": "ok", "message": "処理対象の新着記事はありません。", "count": 0}
+        pending = get_articles_for_embedding(rebuild=rebuild)
+        batch = pending[:batch_size]
+        failed_ids: List[int] = []
+        processed = 0
 
-        # 2. まとめてGeminiに評価させる
-        user_context = get_user_context()
-        evaluated = evaluate_articles_with_gemini(unprocessed, user_context)
-        if not evaluated:
-            return {"status": "error", "message": "Geminiからの評価取得に失敗しました。"}
+        for article in batch:
+            article_id = article["id"]
+            try:
+                embed_text = build_article_embedding_text(article)
+                if not embed_text.strip():
+                    continue
+                embedding = create_embedding(embed_text)
+                save_article_embedding(article_id, embedding)
+                processed += 1
+            except Exception as e:
+                print(f"Embedding error for article {article_id}: {e}")
+                failed_ids.append(article_id)
 
-        # 3. Supabaseを更新
-        update_articles_in_supabase(evaluated)
-        
+        remaining = max(0, len(pending) - len(batch))
         return {
-            "status": "success", 
-            "message": f"{len(unprocessed)}件の記事のAI要約・スコアリングが完了しました！",
-            "count": len(unprocessed)
+            "processed": processed,
+            "remaining": remaining,
+            "failed_ids": failed_ids,
         }
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        raise HTTPException(status_code=500, detail=f"記事のベクトル化に失敗しました: {e}")
+
+
+@app.post("/api/articles/vector-search")
+def search_articles_by_vector_endpoint(body: ArticleVectorSearchRequest):
+    """ベクトル類似度検索（記事の類似度スコアと一覧を直接取得）"""
+    query = body.query.strip()
+    if not query:
+        raise HTTPException(status_code=422, detail="検索文を入力してください")
+    try:
+        embedding = create_embedding(f"検索クエリ: {query}")
+        articles = search_similar_articles(embedding, body.limit, body.threshold)
+        return {"query": query, "count": len(articles), "articles": articles}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"ベクトル検索に失敗しました: {e}")
+
+
+@app.post("/api/rag/ask", response_model=RagQueryResponse)
+def ask_rag_endpoint(body: RagQueryRequest):
+    """
+    RAG質問回答:
+    質問文からベクトル検索で関連記事を抽出し、Geminiが根拠記事を元に回答・分析を生成する。
+    """
+    query = body.query.strip()
+    if not query:
+        raise HTTPException(status_code=422, detail="質問文を入力してください")
+    try:
+        embedding = create_embedding(f"検索クエリ: {query}")
+        articles = search_similar_articles(embedding, limit=body.limit, threshold=body.threshold)
+        rag_result = generate_rag_answer(query, articles)
+        return {
+            "query": query,
+            "answer": rag_result["answer"],
+            "key_insights": rag_result["key_insights"],
+            "referenced_articles": rag_result["referenced_articles"],
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"RAG回答の生成に失敗しました: {e}")
+
+
+@app.get("/api/qiita/search")
+def search_qiita_endpoint(
+    q: str = Query(min_length=1, max_length=200),
+    page: int = Query(default=1, ge=1, le=100),
+    per_page: int = Query(default=20, ge=1, le=100),
+):
+    normalized_query = q.strip()
+    if not normalized_query:
+        raise HTTPException(status_code=422, detail="検索キーワードを入力してください")
+    try:
+        return search_qiita_articles(normalized_query, page, per_page)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Qiita記事の検索に失敗しました: {e}")

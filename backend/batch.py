@@ -1,36 +1,19 @@
-from ai import evaluate_articles_with_gemini
-from crud import get_unprocessed_articles, get_user_context, update_articles_in_supabase
 from rss import get_news
+from crud import vectorize_unembedded_articles
+
 
 def run_batch_pipeline():
-
     """
-    夜間バッチなどで実行されるメインのパイプライン関数
+    夜間バッチ（GitHub Actions等）で実行されるRAGパイプライン関数
+    RSS新着記事の取得と、未ベクトル化記事の自動Embedding生成（RAGインデックス化）を実行
     """
-    
-    print("--- 最新記事取得・DB保存開始 ---")
-    get_news()
-    
-    print("--- AI要約・スコアリングバッチ開始 ---")
-    
-    # 1. 未処理の記事を取得
-    unprocessed = get_unprocessed_articles()
-    if not unprocessed:
-        print("処理対象の新着記事はありません。")
-        return
+    print("--- [RAG Batch] 最新記事取得・DB保存開始 ---")
+    get_news(auto_vectorize=False)
 
-    print(f"{len(unprocessed)}件の未処理記事を検出しました。Geminiへ送信します...")
+    print("--- [RAG Batch] 未ベクトル化記事の自動Embedding化開始 ---")
+    result = vectorize_unembedded_articles(batch_size=100)
+    print(f"--- [RAG Batch] パイプライン完了: {result['processed']}件ベクトル化 ---")
 
-    # 2. まとめてGeminiに評価させる（バッチ処理）
-    user_context = get_user_context()
-    evaluated = evaluate_articles_with_gemini(unprocessed, user_context)
-    if not evaluated:
-        print("Geminiからの評価結果を取得できませんでした。")
-        return
-
-    # 3. Supabaseを更新
-    update_articles_in_supabase(evaluated)
-    print("--- AI要約・スコアリングバッチ完了 ---")
 
 if __name__ == "__main__":
     run_batch_pipeline()

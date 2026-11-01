@@ -54,7 +54,8 @@ export function SidebarGoals() {
     const loadContext = async () => {
       try {
         const response = await fetch(`${API_URL}/api/user-context`);
-        if (!response.ok) throw new Error("ユーザー情報を読み込めませんでした。");
+        if (!response.ok)
+          throw new Error("ユーザー情報を読み込めませんでした。");
         const data = await response.json();
         setContext({ ...emptyContext, ...data });
       } catch (error) {
@@ -74,7 +75,8 @@ export function SidebarGoals() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(context),
     });
-    if (!response.ok) throw new Error("保存できませんでした。もう一度お試しください。");
+    if (!response.ok)
+      throw new Error("保存できませんでした。もう一度お試しください。");
     const savedContext = { ...emptyContext, ...(await response.json()) };
     setContext(savedContext);
     return savedContext;
@@ -88,7 +90,9 @@ export function SidebarGoals() {
       await persistContext();
       setMessage("保存しました。これからの記事評価に反映されます。");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "保存に失敗しました。");
+      setMessage(
+        error instanceof Error ? error.message : "保存に失敗しました。",
+      );
     } finally {
       setSaving(false);
     }
@@ -103,10 +107,15 @@ export function SidebarGoals() {
       const response = await fetch(`${API_URL}/api/user-context/advice`, {
         method: "POST",
       });
-      if (!response.ok) throw new Error("提案を作れませんでした。少し待ってから再度お試しください。");
+      if (!response.ok)
+        throw new Error(
+          "提案を作れませんでした。少し待ってから再度お試しください。",
+        );
       setAdvice(await response.json());
     } catch (error) {
-      setAdviceError(error instanceof Error ? error.message : "提案の作成に失敗しました。");
+      setAdviceError(
+        error instanceof Error ? error.message : "提案の作成に失敗しました。",
+      );
     } finally {
       setGeneratingAdvice(false);
     }
@@ -115,13 +124,15 @@ export function SidebarGoals() {
   const updateText = (field: keyof UserContext, value: string) => {
     setContext((current) => ({
       ...current,
-      [field]: field === "subjects" || field === "interests" || field === "projects"
-        ? linesToList(value)
-        : value,
+      [field]:
+        field === "subjects" || field === "interests" || field === "projects"
+          ? linesToList(value)
+          : value,
     }));
   };
 
-  if (loading) return <main className="flex-1 p-6">ユーザー情報を読み込み中…</main>;
+  if (loading)
+    return <main className="flex-1 p-6">ユーザー情報を読み込み中…</main>;
 
   return (
     <main className="flex-1 bg-white p-6">
@@ -137,7 +148,9 @@ export function SidebarGoals() {
             <textarea
               rows={2}
               value={context.career_goal}
-              onChange={(event) => updateText("career_goal", event.target.value)}
+              onChange={(event) =>
+                updateText("career_goal", event.target.value)
+              }
               className="mt-1 w-full rounded border border-slate-300 p-3"
               placeholder="例：フルスタックWebエンジニアを目指す"
             />
@@ -148,7 +161,9 @@ export function SidebarGoals() {
             <textarea
               rows={3}
               value={context.current_focus}
-              onChange={(event) => updateText("current_focus", event.target.value)}
+              onChange={(event) =>
+                updateText("current_focus", event.target.value)
+              }
               className="mt-1 w-full rounded border border-slate-300 p-3"
               placeholder="今気になっていること、学びたいこと"
             />
@@ -161,7 +176,9 @@ export function SidebarGoals() {
               value={context.interests.join("\n")}
               onChange={(event) => updateText("interests", event.target.value)}
               className="mt-1 w-full rounded border border-slate-300 p-3"
-              placeholder={"TypeScript\nAIとエンジニアのキャリア\nクラウドインフラ"}
+              placeholder={
+                "TypeScript\nAIとエンジニアのキャリア\nクラウドインフラ"
+              }
             />
           </label>
 
@@ -192,7 +209,9 @@ export function SidebarGoals() {
             <textarea
               rows={3}
               value={context.current_situation}
-              onChange={(event) => updateText("current_situation", event.target.value)}
+              onChange={(event) =>
+                updateText("current_situation", event.target.value)
+              }
               className="mt-1 w-full rounded border border-slate-300 p-3"
               placeholder="例：不安をあおらず、事実と推測を分けて整理したい"
             />
@@ -206,63 +225,21 @@ export function SidebarGoals() {
             >
               {saving ? "保存中…" : "保存する"}
             </button>
-            {message && <p role="status" className="text-sm text-slate-600">{message}</p>}
+            {message && (
+              <p role="status" className="text-sm text-slate-600">
+                {message}
+              </p>
+            )}
           </div>
         </form>
 
         <section className="mt-10 border-t border-slate-200 pt-6">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <h2 className="text-xl font-semibold">情報との向き合い方を相談する</h2>
-              <p className="mt-1 max-w-2xl text-sm text-slate-600">
-                保存したコンテクストから、今見るテーマや探す記事の切り口を提案します。具体的な記事を検索する機能ではありません。開発タスクへの結びつけも強制しません。
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => void createAdvice()}
-              disabled={generatingAdvice || saving}
-              className="rounded bg-indigo-600 px-4 py-2 font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-            >
-              {generatingAdvice ? "考えています…" : advice ? "もう一度相談する" : "AIに相談する"}
-            </button>
-          </div>
+          <div className="flex flex-wrap items-start justify-between gap-4"></div>
 
-          {adviceError && <p role="alert" className="mt-4 text-sm text-red-600">{adviceError}</p>}
-
-          {advice && (
-            <div className="mt-6 space-y-5">
-              <p className="rounded-lg bg-indigo-50 p-4 text-slate-800">{advice.overview}</p>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                {advice.themes.map((item, index) => (
-                  <article key={`${item.theme}-${index}`} className="rounded-lg border border-slate-200 p-4">
-                    <h3 className="font-semibold">{item.theme}</h3>
-                    <p className="mt-2 text-sm text-slate-700">{item.why}</p>
-                    <h4 className="mt-4 text-sm font-medium">探す記事の切り口</h4>
-                    <ul className="mt-1 list-inside list-disc text-sm text-slate-600">
-                      {item.article_angles.map((angle, angleIndex) => <li key={`${angle}-${angleIndex}`}>{angle}</li>)}
-                    </ul>
-                    <h4 className="mt-4 text-sm font-medium">検索語の案</h4>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {item.search_queries.map((query, queryIndex) => (
-                        <span key={`${query}-${queryIndex}`} className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">{query}</span>
-                      ))}
-                    </div>
-                  </article>
-                ))}
-              </div>
-
-              <div className="rounded-lg border border-slate-200 p-4">
-                <h3 className="font-medium">読んだ後は、どれを選んでも大丈夫</h3>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {advice.after_reading_choices.map((choice, index) => (
-                    <span key={`${choice}-${index}`} className="rounded-full border border-slate-300 px-3 py-1 text-sm">{choice}</span>
-                  ))}
-                </div>
-                <p className="mt-4 text-sm text-slate-600">{advice.reminder}</p>
-              </div>
-            </div>
+          {adviceError && (
+            <p role="alert" className="mt-4 text-sm text-red-600">
+              {adviceError}
+            </p>
           )}
         </section>
       </div>

@@ -3,18 +3,13 @@ import json
 from typing import List, Dict, Any
 from google import genai
 from google.genai import types
-from supabase import create_client, Client
 
-# 環境変数の読み込み（または適宜設定）
-SUPABASE_URL = os.environ.get("SUPABASE_URL")
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 client = genai.Client(api_key=GEMINI_API_KEY)
 
 EMBEDDING_MODEL = os.environ.get("GEMINI_EMBEDDING_MODEL", "gemini-embedding-2")
 EMBEDDING_DIMENSIONS = 1536
+GENERATION_MODEL = os.environ.get("GEMINI_GENERATION_MODEL", "gemini-2.5-flash")
 
 
 def build_article_embedding_text(article: Dict[str, Any]) -> str:
@@ -41,101 +36,74 @@ def create_embedding(text: str) -> List[float]:
     return values
 
 
-def generate_context_advice(user_context: Dict[str, Any]) -> Dict[str, Any]:
-    """ユーザーコンテクストから、情報との向き合い方を提案する。"""
-    system_instruction = """
-あなたは、ユーザーが技術情報に追われず、自分で情報との距離を選べるよう支援するリサーチメンターです。
-渡されたユーザーコンテクストを読み、今見る価値のあるテーマを2〜3個提案してください。
-具体的な記事を読んだり検索したりしたふりはせず、探す記事の種類や検索語の案を出してください。
-各テーマについて、なぜ今そのテーマを見るとよさそうか、どんな切り口の記事を探すか、検索語を示してください。
-記事の内容を必ず実装や開発タスクに結びつけないでください。情報共有、基礎知識、経験談、キャリアを考える記事も候補に含めてください。
-読後の選択肢には「少し試す」「頭の片隅に置く」「大切に保存する」「今日は閉じる」を含め、行動を強制しないでください。
-不安をあおらず、記事だけで将来や就職可能性を断定しないでください。提案は本人が選ぶための材料として、簡潔で具体的にしてください。
-
-必ず次のJSON形式だけで返してください:
-{
-  "overview": "今の状況に合わせた短い導入",
-  "themes": [
-    {
-      "theme": "注目テーマ",
-      "why": "見る価値がありそうな理由",
-      "article_angles": ["探す記事の切り口"],
-      "search_queries": ["検索語の案"]
-    }
-  ],
-  "after_reading_choices": ["少し試す", "頭の片隅に置く", "大切に保存する", "今日は閉じる"],
-  "reminder": "情報との距離を自分で決めてよいことを伝える一言"
-}
-"""
-    response = client.models.generate_content(
-        model="gemini-3.5-flash-lite",
-        contents=f"ユーザーコンテクスト:\n{json.dumps(user_context, ensure_ascii=False)}",
-        config=types.GenerateContentConfig(
-            system_instruction=system_instruction,
-            response_mime_type="application/json",
-            temperature=0.4,
-        ),
-    )
-    return json.loads(response.text)
-
-
-def evaluate_articles_with_gemini(
-    articles: List[Dict[str, Any]],
-    user_context: Dict[str, Any],
-) -> List[Dict[str, Any]]:
+def generate_rag_answer(query: str, articles: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
-    Gemini APIに記事リストを渡し、一括でスコアと一言コメントをJSON形式で生成させる。
+    RAG回答生成: ベクトル検索で取得した関連記事を根拠に、
+    質問に対する分析・回答およびキーインサイトを生成する。
     """
     if not articles:
-        return []
-
-    # Geminiに渡すための軽量なデータ構造に整形
-    articles_payload = [
-        {
-            "id": article["id"],
-            "title": article["title"],
-            "summary": article.get("ai_comment", "") or article.get("summary", "")[:300]
+        return {
+            "answer": "関連する記事が見つかりませんでした。別のキーワードや表現で再度お試しください。",
+            "key_insights": [],
+            "referenced_articles": [],
         }
-        for article in articles
-    ]
 
-    system_instruction = f"""
-あなたは、技術情報をユーザーの目標や関心に照らして整理するリサーチメンターです。
-記事をユーザーの開発タスクに無理に結びつけず、情報共有や長期的な学びとして価値がある場合も適切に評価してください。
-新しさだけで価値を判断せず、記事内容がユーザーのコンテクストにどう関係するかを根拠にしてください。
-不安をあおったり、記事だけからキャリアの将来を断定したりしないでください。
+    # 記事コンテキストの整形
+    articles_context = []
+    for a in articles:
+        articles_context.append({
+            "id": a.get("id"),
+            "title": a.get("title"),
+            "url": a.get("url"),
+            "summary": (a.get("summary") or "")[:1000],
+        })
 
-【ユーザーのコンテクスト】
-{json.dumps(user_context, ensure_ascii=False)}
+    system_instruction = """
+あなたは、日本のIT業界の新卒採用・エンジニア育成・AI活用に関する課題や本音を分析するリサーチアナリストです。
+提供された参考記事群（Zenn、Qiita、noteなどから収集されたリアルな声）のみを根拠として、ユーザーの質問や疑問に対する回答を作成してください。
 
-【出力要件】
-各記事の `id` に対し、コンテクストとの関連度を `score`（0〜100の整数）、なぜ関係があるかを簡潔に表す `comment`（1〜2文）を付けてください。
-根拠が薄い記事に無理な関連づけをせず、低いスコアにしてください。
-必ず有効なJSON配列だけを返してください。形式は [{{"id": 1, "score": 0, "comment": "..."}}] です。
+【回答方針】
+1. 一般論や建前ではなく、記事群から読み取れる「生々しい本音」「リアルな悩み・課題」「現場の葛藤や失敗談」にフォーカスしてください。
+2. 回答本文（answer）はマークダウン形式で、読みやすく構造化（見出し、箇条書き等）して記述してください。
+3. 根拠となった記事がある場合は、文中で [記事タイトル](URL) の形式で自然に言及・リンクしてください。
+4. 提供された記事に書かれていない事実を勝手に捏造しないでください。
+
+【出力形式】
+必ず次のJSON構造のみで返してください:
+{
+  "answer": "マークダウン形式の回答本文",
+  "key_insights": ["記事群から抽出された重要ポイント・洞察（箇条書き2〜4個）"]
+}
 """
 
-    user_prompt = f"""
-以下の未読RSSニュース一覧を評価し、指定されたJSON構造で返してください。
+    prompt = f"""
+【ユーザーの質問】
+{query}
 
-ニュース一覧:
-{json.dumps(articles_payload, ensure_ascii=False)}
+【参考記事群】
+{json.dumps(articles_context, ensure_ascii=False, indent=2)}
 """
+
     try:
-        # 構造化出力（JSON Mode）を指定してGeminiを呼び出し
         response = client.models.generate_content(
-            model='gemini-3.5-flash-lite',
-            contents=user_prompt,
+            model=GENERATION_MODEL,
+            contents=prompt,
             config=types.GenerateContentConfig(
                 system_instruction=system_instruction,
                 response_mime_type="application/json",
-                temperature=0.2, # 揺らぎを少なくして一貫した評価をさせる
+                temperature=0.3,
             ),
         )
-        
-        result_data = json.loads(response.text)
-        return result_data
+        data = json.loads(response.text)
+        return {
+            "answer": data.get("answer", ""),
+            "key_insights": data.get("key_insights", []),
+            "referenced_articles": articles,
+        }
     except Exception as e:
-        print(f"Gemini APIによる評価処理でエラーが発生しました: {e}")
-        return []
-
-
+        print(f"RAG回答生成中にエラーが発生しました: {e}")
+        return {
+            "answer": f"回答の生成中にエラーが発生しました: {e}",
+            "key_insights": [],
+            "referenced_articles": articles,
+        }

@@ -1,35 +1,7 @@
 # crud.py
-from typing import List, Dict, Set,Any
+from typing import List, Dict, Set, Any
 from database import supabase
 
-DEFAULT_USER_CONTEXT: Dict[str, Any] = {
-    "id": 1,
-    "career_goal": "フルスタックWebエンジニアまたはクラウドインフラエンジニアを目指す",
-    "current_focus": "情報を集める不安を減らし、自分のペースで学びや開発を続ける",
-    "subjects": [],
-    "interests": [],
-    "current_situation": "技術情報を見て不安に飲まれず、事実を受け止めながら自分のペースで前に進みたい",
-    "projects": [],
-}
-
-
-def get_user_context() -> Dict[str, Any]:
-    """唯一のユーザーコンテクストを取得する。未作成なら空の初期値を返す。"""
-    response = (
-        supabase.table("user_context")
-        .select("*")
-        .eq("id", 1)
-        .maybe_single()
-        .execute()
-    )
-    return response.data or DEFAULT_USER_CONTEXT.copy()
-
-
-def save_user_context(context: Dict[str, Any]) -> Dict[str, Any]:
-    """唯一のユーザーコンテクストを作成または更新する。"""
-    payload = {**context, "id": 1}
-    supabase.table("user_context").upsert(payload, on_conflict="id").execute()
-    return get_user_context()
 
 def get_all_urls() -> Set[str]:
     """
@@ -44,7 +16,8 @@ def get_all_urls() -> Set[str]:
         print(f"URL取得時にエラーが発生しました: {e}")
         return set()
 
-def save_articles(articles: List[Dict[str, str]]) -> None:
+
+def save_articles(articles: List[Dict[str, Any]]) -> None:
     """
     記事リスト（dictのリスト）をSupabaseの `articles` テーブルに一括保存する。
     URLの重複防止はDB側のUNIQUE制約（on_conflict="url"）と ignore_duplicates=True で制御。
@@ -54,8 +27,7 @@ def save_articles(articles: List[Dict[str, str]]) -> None:
         return
 
     try:
-        # upsert + ignore_duplicates により、URLが重複しているレコードはスキップされます
-        response = supabase.table("articles").upsert(
+        supabase.table("articles").upsert(
             articles,
             on_conflict="url",
             ignore_duplicates=True
@@ -77,8 +49,8 @@ def get_article_by_id(article_id: int) -> Dict[str, Any] | None:
 
 
 def save_article_url_as_important(url: str, title: str) -> Dict[str, Any]:
-    """Save a pasted URL as important, promoting an existing article if needed."""
-    article_fields = "id, title, url, summary, ai_score, ai_comment, save_type, user_note, created_at"
+    """Save a user-provided HTTPS URL to the important articles list."""
+    article_fields = "id, title, url, summary, save_type, user_note, created_at"
     lookup = (
         supabase.table("articles")
         .select(article_fields)
@@ -139,7 +111,7 @@ def update_article_title(article_id: int, title: str) -> Dict[str, Any] | None:
     )
     response = (
         supabase.table("articles")
-        .select("id, title, url, summary, ai_score, ai_comment, save_type, user_note, created_at")
+        .select("id, title, url, summary, save_type, user_note, created_at")
         .eq("id", article_id)
         .limit(1)
         .execute()
@@ -152,20 +124,9 @@ def update_article_title(article_id: int, title: str) -> Dict[str, Any] | None:
     return article
 
 
-def update_article_summary(article_id: int, title: str, summary: str) -> Dict[str, Any] | None:
-    response = (
-        supabase.table("articles")
-        .update({"title": title, "summary": summary, "embedding": None})
-        .eq("id", article_id)
-        .execute()
-    )
-    return response.data[0] if response.data else None
-
-
-def get_top_scored_articles(limit: int = 100, unhandled_only: bool = True) -> List[Dict[str, Any]]:
+def get_articles(limit: int = 100, unhandled_only: bool = True) -> List[Dict[str, Any]]:
     """
-    Supabaseの `articles` テーブルから、未処理（save_type is null）の記事を対象に、
-    ai_score の高い順、次に新しい順（created_at desc）で最大100件取得する。
+    Supabaseの `articles` テーブルから、最新順（created_at desc）で最大100件取得する。
     """
     try:
         query = supabase.table("articles").select("*")
@@ -173,7 +134,6 @@ def get_top_scored_articles(limit: int = 100, unhandled_only: bool = True) -> Li
             query = query.is_("save_type", "null")
         response = (
             query
-            .order("ai_score", desc=True, nullsfirst=False)
             .order("created_at", desc=True)
             .limit(limit)
             .execute()
@@ -184,55 +144,24 @@ def get_top_scored_articles(limit: int = 100, unhandled_only: bool = True) -> Li
         return []
 
 
-def get_unprocessed_articles() -> List[Dict[str, Any]]:
-    """
-    Supabaseの `articles` テーブルから、まだAIスコアがついていない（ai_scoreがNULLの）記事を取得する。
-    """
+def get_top_scored_articles(limit: int = 100, unhandled_only: bool = True) -> List[Dict[str, Any]]:
+    """互換性のためのエイリアス。最新順で取得する。"""
+    return get_articles(limit=limit, unhandled_only=unhandled_only)
+
+
+def get_important_articles() -> List[Dict[str, Any]]:
     try:
-        # ai_score が is.null のものを取得（未処理のものだけを効率よく処理する）
         response = (
             supabase.table("articles")
-            .select("id, title, ai_comment, summary")
-            .is_("ai_score", "null")
+            .select("*")
+            .eq("save_type", "important")
+            .order("created_at", desc=True)
             .execute()
         )
-        return response.data
+        return response.data or []
     except Exception as e:
-        print(f"未処理記事の取得時にエラーが発生しました: {e}")
+        print(f"重要記事取得時にエラーが発生しました: {e}")
         return []
-
-
-def get_important_articles():
-    response = (
-        supabase.table("articles")
-        .select("*")
-        .eq("save_type", "important")
-        .order("ai_score", desc=True)
-        .execute()
-    )
-    return response.data
-
-
-def update_articles_in_supabase(evaluated_results: List[Dict[str, Any]]):
-    """
-    Geminiから返ってきた評価結果（スコア・コメント）をSupabaseに一括反映する。
-    """
-    for item in evaluated_results:
-        article_id = item.get("id")
-        score = item.get("score")
-        comment = item.get("comment")
-
-        if article_id is None:
-            continue
-
-        try:
-            supabase.table("articles").update({
-                "ai_score": score,
-                "ai_comment": comment
-            }).eq("id", article_id).execute()
-            print(f"記事ID {article_id}: 更新成功 (Score: {score})")
-        except Exception as e:
-            print(f"記事ID {article_id} のDB更新に失敗しました: {e}")
 
 
 def update_article_user_state(
@@ -240,7 +169,7 @@ def update_article_user_state(
     save_type: str | None,
     user_note: str | None,
 ) -> Dict[str, Any] | None:
-    """試作用に記事の保存タイプと自分用メモを更新する。"""
+    """記事の保存タイプと自分用メモを更新する。"""
     response = (
         supabase.table("articles")
         .update({"save_type": save_type, "user_note": user_note})
@@ -279,3 +208,33 @@ def search_similar_articles(
         },
     ).execute()
     return response.data or []
+
+
+def vectorize_unembedded_articles(batch_size: int = 50) -> Dict[str, Any]:
+    """
+    未ベクトル化の記事を自動検出して Gemini Embedding を生成・保存する。
+    RAGパイプラインの自動化処理として利用。
+    """
+    from ai import build_article_embedding_text, create_embedding
+
+    pending = get_articles_for_embedding(rebuild=False)[:batch_size]
+    if not pending:
+        return {"processed": 0, "failed_ids": []}
+
+    processed = 0
+    failed_ids = []
+    for article in pending:
+        article_id = article["id"]
+        try:
+            embed_text = build_article_embedding_text(article)
+            if not embed_text.strip():
+                continue
+            embedding = create_embedding(embed_text)
+            save_article_embedding(article_id, embedding)
+            processed += 1
+        except Exception as e:
+            print(f"記事ID {article_id} のベクトル化に失敗: {e}")
+            failed_ids.append(article_id)
+
+    print(f"✅ {processed} 件の記事をベクトル化しました（失敗: {len(failed_ids)} 件）")
+    return {"processed": processed, "failed_ids": failed_ids}

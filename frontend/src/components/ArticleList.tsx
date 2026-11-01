@@ -11,7 +11,7 @@ export function ArticleList({
   onArticleAdded,
   showSaveByUrl = false,
   editableTitle = false,
-  refreshableSummary = false,
+  // refreshableSummary = false,
   showRssFetchControls = false,
   onRefreshArticles,
 }: {
@@ -32,8 +32,9 @@ export function ArticleList({
   const [editingTitleId, setEditingTitleId] = useState<number | null>(null);
   const [titleDraft, setTitleDraft] = useState("");
   const [savingTitleId, setSavingTitleId] = useState<number | null>(null);
-  const [refreshingSummaryId, setRefreshingSummaryId] = useState<number | null>(null);
-  const [summaryMessage, setSummaryMessage] = useState<string | null>(null);
+  // const [refreshingSummaryId, setRefreshingSummaryId] = useState<number | null>(
+  //   null,
+  // );
 
   // RSS取得・AIパイプライン用ステート
   const [isFetchingRss, setIsFetchingRss] = useState(false);
@@ -48,14 +49,20 @@ export function ArticleList({
     setError(null);
     setPipelineMessage(null);
     try {
-      const response = await fetch(`${API_URL}/api/fetch-rss`, { method: "POST" });
+      const response = await fetch(`${API_URL}/api/fetch-rss`, {
+        method: "POST",
+      });
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data.detail || data.message || "RSSの取得に失敗しました。");
+        throw new Error(
+          data.detail || data.message || "RSSの取得に失敗しました。",
+        );
       }
       setPipelineMessage({
         type: "success",
-        text: data.message || `${data.count ?? 0}件の新着記事を取得・保存しました！`,
+        text:
+          data.message ||
+          `${data.count ?? 0}件の新着記事を取得・保存しました！`,
       });
       if (onRefreshArticles) {
         await onRefreshArticles();
@@ -75,10 +82,14 @@ export function ArticleList({
     setError(null);
     setPipelineMessage(null);
     try {
-      const response = await fetch(`${API_URL}/api/run-pipeline`, { method: "POST" });
+      const response = await fetch(`${API_URL}/api/run-pipeline`, {
+        method: "POST",
+      });
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data.detail || data.message || "パイプラインの実行に失敗しました。");
+        throw new Error(
+          data.detail || data.message || "パイプラインの実行に失敗しました。",
+        );
       }
       setPipelineMessage({
         type: data.status === "warning" ? "warning" : "success",
@@ -90,38 +101,41 @@ export function ArticleList({
     } catch (err) {
       setPipelineMessage({
         type: "error",
-        text: err instanceof Error ? err.message : "パイプラインの実行に失敗しました。",
+        text:
+          err instanceof Error
+            ? err.message
+            : "パイプラインの実行に失敗しました。",
       });
     } finally {
       setIsRunningPipeline(false);
     }
   };
 
-  const refreshArticleSummary = async (article: ResponseArticle) => {
-    setRefreshingSummaryId(article.id);
-    setError(null);
-    setSummaryMessage(null);
-    try {
-      const response = await fetch(
-        `${API_URL}/api/articles/${article.id}/refresh-summary`,
-        { method: "POST" },
-      );
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.detail || "概要を再取得できませんでした。");
-      }
-      onArticleUpdated(data.article);
-      setSummaryMessage(`「${data.article.title}」の概要を更新しました。`);
-    } catch (refreshError) {
-      setError(
-        refreshError instanceof Error
-          ? refreshError.message
-          : "概要を再取得できませんでした。",
-      );
-    } finally {
-      setRefreshingSummaryId(null);
-    }
-  };
+  // const refreshArticleSummary = async (article: ResponseArticle) => {
+  //   setRefreshingSummaryId(article.id);
+  //   setError(null);
+  //   setSummaryMessage(null);
+  //   try {
+  //     const response = await fetch(
+  //       `${API_URL}/api/articles/${article.id}/refresh-summary`,
+  //       { method: "POST" },
+  //     );
+  //     const data = await response.json();
+  //     if (!response.ok) {
+  //       throw new Error(data.detail || "概要を再取得できませんでした。");
+  //     }
+  //     onArticleUpdated(data.article);
+  //     setSummaryMessage(`「${data.article.title}」の概要を更新しました。`);
+  //   } catch (refreshError) {
+  //     setError(
+  //       refreshError instanceof Error
+  //         ? refreshError.message
+  //         : "概要を再取得できませんでした。",
+  //     );
+  //   } finally {
+  //     setRefreshingSummaryId(null);
+  //   }
+  // };
 
   const saveArticleTitle = async (article: ResponseArticle) => {
     const title = titleDraft.trim();
@@ -132,17 +146,25 @@ export function ArticleList({
     setSavingTitleId(article.id);
     setError(null);
     try {
-      const response = await fetch(`${API_URL}/api/articles/${article.id}/title`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title }),
-      });
+      const response = await fetch(
+        `${API_URL}/api/articles/${article.id}/title`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title }),
+        },
+      );
       const data = await response.json();
-      if (!response.ok) throw new Error(data.detail || "タイトルを更新できませんでした。");
+      if (!response.ok)
+        throw new Error(data.detail || "タイトルを更新できませんでした。");
       onArticleUpdated(data);
       setEditingTitleId(null);
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "タイトルを更新できませんでした。");
+      setError(
+        saveError instanceof Error
+          ? saveError.message
+          : "タイトルを更新できませんでした。",
+      );
     } finally {
       setSavingTitleId(null);
     }
@@ -167,7 +189,11 @@ export function ArticleList({
       setArticleUrl("");
       setSaveUrlMessage("重要記事に保存しました。");
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "記事を保存できませんでした。");
+      setError(
+        saveError instanceof Error
+          ? saveError.message
+          : "記事を保存できませんでした。",
+      );
     } finally {
       setIsSavingUrl(false);
     }
@@ -212,7 +238,8 @@ export function ArticleList({
                 <span>🛠️ デバッグ・プロトタイピング操作</span>
               </h2>
               <p className="mt-0.5 text-xs text-slate-500">
-                GitHub Actionsを待たずに、手動でRSS記事の取得やAI評価を実行できます。
+                GitHub
+                Actionsを待たずに、手動でRSS記事の取得やAI評価を実行できます。
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -259,8 +286,8 @@ export function ArticleList({
                 pipelineMessage.type === "success"
                   ? "bg-emerald-50 text-emerald-800 border-emerald-200"
                   : pipelineMessage.type === "warning"
-                  ? "bg-amber-50 text-amber-800 border-amber-200"
-                  : "bg-red-50 text-red-800 border-red-200"
+                    ? "bg-amber-50 text-amber-800 border-amber-200"
+                    : "bg-red-50 text-red-800 border-red-200"
               }`}
             >
               {pipelineMessage.text}
@@ -275,7 +302,10 @@ export function ArticleList({
           <p className="mt-1 text-sm text-slate-600">
             アプリ外で見つけた記事のURLを貼り付けて保存できます。
           </p>
-          <form onSubmit={(event) => void saveArticleUrl(event)} className="mt-3 flex flex-col gap-2 sm:flex-row">
+          <form
+            onSubmit={(event) => void saveArticleUrl(event)}
+            className="mt-3 flex flex-col gap-2 sm:flex-row"
+          >
             <input
               type="url"
               required
@@ -294,11 +324,17 @@ export function ArticleList({
               {isSavingUrl ? "保存中…" : "重要記事に保存"}
             </button>
           </form>
-          {saveUrlMessage && <p role="status" className="mt-2 text-sm text-emerald-700">{saveUrlMessage}</p>}
+          {saveUrlMessage && (
+            <p role="status" className="mt-2 text-sm text-emerald-700">
+              {saveUrlMessage}
+            </p>
+          )}
         </section>
       )}
       <div className="mb-3">
-        <span className="font-semibold text-slate-700">全 {articlesData?.length || 0} 件</span>
+        <span className="font-semibold text-slate-700">
+          全 {articlesData?.length || 0} 件
+        </span>
       </div>
 
       {/* 記事カードの一覧 */}
@@ -308,11 +344,7 @@ export function ArticleList({
             {error}
           </p>
         )}
-        {summaryMessage && (
-          <p role="status" className="text-sm text-emerald-700 mb-2">
-            {summaryMessage}
-          </p>
-        )}
+
         {articlesData ? (
           articlesData?.map((article) => (
             <article
@@ -356,7 +388,9 @@ export function ArticleList({
                 ) : (
                   <div className="flex flex-wrap items-center gap-2">
                     <a href={article.url} target="_blank" rel="noreferrer">
-                      <h3 className="font-medium text-blue-700 hover:underline">{article.title}</h3>
+                      <h3 className="font-medium text-blue-700 hover:underline">
+                        {article.title}
+                      </h3>
                     </a>
                     {editableTitle && (
                       <button
@@ -374,7 +408,7 @@ export function ArticleList({
                 )}
               </div>
               <p className="text-sm text-slate-600">{article.summary}</p>
-              {refreshableSummary && (
+              {/* {refreshableSummary && (
                 <button
                   type="button"
                   onClick={() => void refreshArticleSummary(article)}
@@ -383,7 +417,7 @@ export function ArticleList({
                 >
                   {refreshingSummaryId === article.id ? "取得中…" : "概要を再取得"}
                 </button>
-              )}
+              )} */}
               <div className="flex flex-wrap items-center gap-2">
                 <label className="text-sm" htmlFor={`save-type-${article.id}`}>
                   保存タイプ
