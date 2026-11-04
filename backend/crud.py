@@ -238,3 +238,31 @@ def vectorize_unembedded_articles(batch_size: int = 50) -> Dict[str, Any]:
 
     print(f"✅ {processed} 件の記事をベクトル化しました（失敗: {len(failed_ids)} 件）")
     return {"processed": processed, "failed_ids": failed_ids}
+
+
+
+def get_user_context() -> Dict[str, Any]:
+    """唯一のユーザーコンテクストを取得する。未作成なら空の初期値を返す。"""
+    print("Fetching user context from Supabase...")
+    
+    response = (
+        supabase.table("user_context")
+        .select("career_goal, current_focus, current_situation, interests, projects, subjects")
+        .eq("id", 1)
+        .maybe_single()
+        .execute()
+    )
+    return response.data 
+
+
+
+def save_user_context(context: Dict[str, Any]):
+    """唯一のユーザーコンテクストを作成または更新する。"""
+    print(f"Saving user context: {context}")
+    payload = {**context, "id": 1}
+    try:
+        supabase.table("user_context").upsert(payload, on_conflict="id").execute()
+        return get_user_context()
+    except Exception as e:
+        print(f"Error saving user context: {e}")
+    

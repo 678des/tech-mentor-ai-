@@ -16,9 +16,7 @@ from ai import (
 )
 from crud import (
     get_articles,
-    get_top_scored_articles,
     get_important_articles,
-    get_article_by_id,
     save_article_url_as_important,
     update_article_title,
     update_article_user_state,
@@ -26,6 +24,10 @@ from crud import (
     save_article_embedding,
     search_similar_articles,
     vectorize_unembedded_articles,
+    save_articles,
+    save_user_context,
+    get_user_context,
+    get_articles
 )
 from rss import get_news
 from qiita import get_qiita_article_by_url, search_qiita_articles
@@ -82,7 +84,13 @@ class RagQueryResponse(BaseModel):
     key_insights: List[str]
     referenced_articles: List[Dict[str, Any]]
 
-
+class UserContextResponse(BaseModel):
+    career_goal:str
+    current_focus:str
+    subjects:List[str]
+    interests:List[str]
+    current_situation:str
+    projects:List[str]
 # --- エンドポイント ---
 
 @app.get("/api/news")
@@ -297,3 +305,18 @@ def search_qiita_endpoint(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Qiita記事の検索に失敗しました: {e}")
+
+@app.put("/api/user-context")
+def save_user_context_endpoint(body: UserContextResponse):
+    try:
+        print(f"Saving user context: {body.dict()}")
+        return save_user_context(body.dict())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"ユーザーコンテクストの保存に失敗しました: {e}")
+    
+@app.get("/api/user-context")
+def get_user_context_endpoint():
+    try:
+        return get_user_context()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"ユーザーコンテクストの取得に失敗しました: {e}")
