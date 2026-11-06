@@ -54,8 +54,11 @@ function App() {
       console.error("Fetch error:", error);
     }
   };
+
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 初回表示用のデータ取得
     fetchArticles();
+
     fetchImportantArticles();
   }, []);
 
@@ -100,14 +103,18 @@ function App() {
                 const articles = current ?? [];
                 return [
                   savedArticle,
-                  ...articles.filter((article) => article.id !== savedArticle.id),
+                  ...articles.filter(
+                    (article) => article.id !== savedArticle.id,
+                  ),
                 ];
               });
               setArticleData((current) => {
                 if (!current) return current;
                 return [
                   savedArticle,
-                  ...current.filter((article) => article.id !== savedArticle.id),
+                  ...current.filter(
+                    (article) => article.id !== savedArticle.id,
+                  ),
                 ];
               });
             }}
@@ -121,7 +128,7 @@ function App() {
                         : article,
                     )
                     .filter((article) => article.save_type === "important") ??
-                    null,
+                  null,
               );
             }}
           />

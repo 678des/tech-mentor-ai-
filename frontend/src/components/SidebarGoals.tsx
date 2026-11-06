@@ -13,17 +13,17 @@ type UserContext = {
   projects: string[];
 };
 
-type ContextAdvice = {
-  overview: string;
-  themes: {
-    theme: string;
-    why: string;
-    article_angles: string[];
-    search_queries: string[];
-  }[];
-  after_reading_choices: string[];
-  reminder: string;
-};
+// type ContextAdvice = {
+//   overview: string;
+//   themes: {
+//     theme: string;
+//     why: string;
+//     article_angles: string[];
+//     search_queries: string[];
+//   }[];
+//   after_reading_choices: string[];
+//   reminder: string;
+// };
 
 const emptyContext: UserContext = {
   career_goal: "",
@@ -46,9 +46,9 @@ export function SidebarGoals() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
-  const [generatingAdvice, setGeneratingAdvice] = useState(false);
-  const [advice, setAdvice] = useState<ContextAdvice | null>(null);
-  const [adviceError, setAdviceError] = useState("");
+  // const [generatingAdvice, setGeneratingAdvice] = useState(false);
+  // const [advice, setAdvice] = useState<ContextAdvice | null>(null);
+  // const [adviceError, setAdviceError] = useState("");
 
   useEffect(() => {
     const loadContext = async () => {
@@ -98,28 +98,28 @@ export function SidebarGoals() {
     }
   };
 
-  const createAdvice = async () => {
-    setGeneratingAdvice(true);
-    setAdviceError("");
-    setMessage("");
-    try {
-      await persistContext();
-      const response = await fetch(`${API_URL}/api/user-context/advice`, {
-        method: "POST",
-      });
-      if (!response.ok)
-        throw new Error(
-          "提案を作れませんでした。少し待ってから再度お試しください。",
-        );
-      setAdvice(await response.json());
-    } catch (error) {
-      setAdviceError(
-        error instanceof Error ? error.message : "提案の作成に失敗しました。",
-      );
-    } finally {
-      setGeneratingAdvice(false);
-    }
-  };
+  // const createAdvice = async () => {
+  //   setGeneratingAdvice(true);
+  //   setAdviceError("");
+  //   setMessage("");
+  //   try {
+  //     await persistContext();
+  //     const response = await fetch(`${API_URL}/api/user-context/advice`, {
+  //       method: "POST",
+  //     });
+  //     if (!response.ok)
+  //       throw new Error(
+  //         "提案を作れませんでした。少し待ってから再度お試しください。",
+  //       );
+  //     setAdvice(await response.json());
+  //   } catch (error) {
+  //     setAdviceError(
+  //       error instanceof Error ? error.message : "提案の作成に失敗しました。",
+  //     );
+  //   } finally {
+  //     setGeneratingAdvice(false);
+  //   }
+  // };
 
   const updateText = (field: keyof UserContext, value: string) => {
     setContext((current) => ({
@@ -236,11 +236,11 @@ export function SidebarGoals() {
         <section className="mt-10 border-t border-slate-200 pt-6">
           <div className="flex flex-wrap items-start justify-between gap-4"></div>
 
-          {adviceError && (
+          {/* {adviceError && (
             <p role="alert" className="mt-4 text-sm text-red-600">
               {adviceError}
             </p>
-          )}
+          )} */}
         </section>
       </div>
     </main>
