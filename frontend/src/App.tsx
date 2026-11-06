@@ -30,7 +30,14 @@ function App() {
 
   const fetchArticles = async () => {
     try {
-      const response = await fetch(`${API_URL}/api/articles`);
+      const response = await fetch(`${API_URL}/api/articles/vector-search`, {
+        method: "POST",
+        headers: { "content-Type": "application/json" },
+        body: JSON.stringify({
+          query: "エンジニアはいらなくなるのか",
+          limit: 100,
+        }),
+      });
       if (!response.ok) {
         throw new Error("記事の取得に失敗しました");
       }
